@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Frigate Timelapse Player</title>
+  <style>
+    html,
+    body,
+    video {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: black;
+    }
+
+    video {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<video id="video" controls muted playsinline preload="none"></video>
+<script src="/vendor/hls-1.6.15.min.js"></script>
+<script>
+  const video = document.getElementById("video");
+  const latestPointerUrl = "/published/terrarium/latest.json";
+
+  let hls = null;
+  let sourceLoaded = false;
+  let pendingPlayRequest = null;
+  let bootstrapRequested = false;
+
+  function attachSource(url) {
+    if (sourceLoaded) {
+      return;
+    }
+    sourceLoaded = true;
+
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = url;
+      video.load();
+      return;
+    }
+
+    if (window.Hls && Hls.isSupported()) {
+      hls = new Hls({ autoStartLoad: true });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        console.error("HLS error.", data);
+      });
+      return;
+    }
+
+    console.error("This browser does not support HLS playback.");
+  }
+
+  function bootstrapPlayback() {
+    if (sourceLoaded || pendingPlayRequest || bootstrapRequested) {
+      return;
+    }
+    bootstrapRequested = true;
+
+    pendingPlayRequest = fetch(latestPointerUrl)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((payload) => {
+        if (!payload || typeof payload.playlist_url !== "string") {
+          throw new Error("Missing playlist_url");
+        }
+        attachSource(payload.playlist_url);
+        return video.play();
+      })
+      .catch((error) => {
+        console.error("Failed to load latest playlist pointer.", error);
+        pendingPlayRequest = null;
+        bootstrapRequested = false;
+      });
+  }
+
+  video.addEventListener("click", bootstrapPlayback);
+  video.addEventListener("play", bootstrapPlayback);
+
+  video.addEventListener("error", () => {
+    console.error("Video error.", video.error);
+  });
+</script>
+</body>
+</html>

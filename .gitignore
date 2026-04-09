@@ -1,0 +1,12 @@
+.venv/
+.uv-cache/
+.idea/
+__pycache__/
+*.pyc
+*.egg-info/
+
+/data/
+/output/
+/work/
+/test_recordings/
+/tests/_generated/
