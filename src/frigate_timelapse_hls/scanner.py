@@ -22,12 +22,12 @@ class FrigateVodScanner:
         self,
         *,
         camera: str,
-        source_root: Path,
+        recordings_source_root: Path,
         frigate: FrigateConfig,
         tzinfo: tzinfo,
     ) -> None:
         self._camera = camera
-        self._source_root = source_root
+        self._recordings_source_root = recordings_source_root
         self._frigate = frigate
         self._tzinfo = tzinfo
 
@@ -101,7 +101,7 @@ class FrigateVodScanner:
 
         relative_path = self._map_relative_path(raw_path)
         start_time = self._parse_start_time(relative_path, clip_from_ms)
-        local_path = self._source_root / relative_path
+        local_path = self._recordings_source_root / relative_path
         return SourceClip(
             path=local_path,
             camera=self._camera,

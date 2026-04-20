@@ -28,7 +28,7 @@ class CameraConfig:
 
 @dataclass(slots=True, frozen=True)
 class PathsConfig:
-    source_root: Path
+    recordings_source_root: Path
     state_db: Path
     output_root: Path
 
@@ -156,10 +156,12 @@ def _get_shell_args(data: TomlTable, key: str) -> tuple[str, ...]:
 
 def _apply_env_overrides(data: TomlTable, config_path: Path) -> TomlTable:
     output = dict(data)
-    env_source_root = os.getenv("FRIGATE_TIMELAPSE_SOURCE_ROOT")
-    if env_source_root:
+    env_recordings_source_root = os.getenv("FRIGATE_TIMELAPSE_RECORDINGS_SOURCE_ROOT")
+    if env_recordings_source_root:
         paths = _get_table(output, "paths")
-        paths["source_root"] = str(_resolve_path(env_source_root, config_path))
+        paths["recordings_source_root"] = str(
+            _resolve_path(env_recordings_source_root, config_path)
+        )
         output["paths"] = paths
     env_camera = os.getenv("FRIGATE_TIMELAPSE_CAMERA")
     if env_camera:
@@ -196,7 +198,9 @@ def load_settings(config_path: Path) -> Settings:
         ),
         camera=CameraConfig(name=_get_required_str(camera, "name")),
         paths=PathsConfig(
-            source_root=_resolve_path(_get_required_str(paths, "source_root"), config_path),
+            recordings_source_root=_resolve_path(
+                _get_required_str(paths, "recordings_source_root"), config_path
+            ),
             state_db=_resolve_path(_get_required_str(paths, "state_db"), config_path),
             output_root=_resolve_path(_get_required_str(paths, "output_root"), config_path),
         ),

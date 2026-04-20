@@ -34,7 +34,7 @@ def load_pipeline(settings: Settings) -> TimelapsePipeline:
     store = StateStore(settings.paths.state_db)
     scanner = FrigateVodScanner(
         camera=settings.camera.name,
-        source_root=settings.paths.source_root,
+        recordings_source_root=settings.paths.recordings_source_root,
         frigate=settings.frigate,
         tzinfo=settings.tzinfo,
     )
