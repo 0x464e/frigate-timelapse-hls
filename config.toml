@@ -1,0 +1,43 @@
+# By default the app loads config.toml from the current working directory.
+# Set FTHLS_CONFIG_PATH to load a different TOML file.
+# Every field can also be provided as an environment variable, and env vars
+# always override TOML values. Examples:
+# FTHLS_CAMERA_NAME=terrarium
+# FTHLS_PATHS_RECORDINGS_SOURCE_ROOT=/recordings
+# FTHLS_FFMPEG_CUSTOM_INPUT_ARGS="-hwaccel cuda -hwaccel_output_format cuda"
+
+[app]
+timezone = "Europe/Helsinki"
+ready_buffer_seconds = 30
+log_level = "DEBUG"
+
+[camera]
+name = "terrarium"
+
+[paths]
+# Not applicable when running the docker image (always overridden)
+# defaults are set and then volume mounts are expected there
+recordings_source_root = "/path/to/recordings"
+state_db = "./data/state.sqlite3"
+output_root = "./output"
+
+[frigate]
+base_url = "http://192.168.10.6:5000"
+recordings_root = "/media/frigate/recordings"
+
+[timelapse]
+timelapse_speed = 288.0
+output_fps = 60
+hls_segment_seconds = 2
+
+[schedule]
+start_time = "08:00"
+end_time = "20:00"
+
+[ffmpeg]
+binary = "ffmpeg"
+video_codec = "h264_nvenc"
+preset = "p2"
+profile = "main"
+custom_input_args = "-hwaccel cuda -hwaccel_output_format cuda"
+#custom_output_args = ""
