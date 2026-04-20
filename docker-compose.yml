@@ -1,0 +1,35 @@
+name: frigate-timelapse-hls
+
+services:
+  frigate-timelapse-hls:
+    image: 0x464e/frigate-timelapse-hls
+    container_name: frigate-timelapse-hls
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    ports:
+      - "6773:6773"
+    environment:
+      FTHLS_APP_TIMEZONE: Europe/Helsinki
+      FTHLS_APP_READY_BUFFER_SECONDS: "30"
+      FTHLS_APP_LOG_LEVEL: INFO
+      FTHLS_CAMERA_NAME: mycamera
+      FTHLS_FRIGATE_BASE_URL: http://192.168.10.6:5000
+      FTHLS_FRIGATE_RECORDINGS_ROOT: /media/frigate/recordings
+      FTHLS_TIMELAPSE_TIMELAPSE_SPEED: "288.0"
+      FTHLS_TIMELAPSE_OUTPUT_FPS: "60"
+      FTHLS_TIMELAPSE_HLS_SEGMENT_SECONDS: "2"
+      FTHLS_FFMPEG_BINARY: ffmpeg
+      FTHLS_FFMPEG_VIDEO_CODEC: h264_nvenc
+      FTHLS_FFMPEG_PRESET: p2
+      FTHLS_FFMPEG_PROFILE: main
+      FTHLS_FFMPEG_CUSTOM_INPUT_ARGS: -hwaccel cuda -hwaccel_output_format cuda
+    volumes:
+      - ./mnt/my/frigate/mount:/recordings:ro
+      - ./mnt/my/frigate/output:/output
+      - ./data:/data
