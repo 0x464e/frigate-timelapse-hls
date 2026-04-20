@@ -3,8 +3,6 @@ from __future__ import annotations
 import logging
 import time
 from argparse import ArgumentParser
-from dataclasses import asdict
-from pathlib import Path
 
 from .config import Settings, load_settings
 from .hls import LiveHLSPublisher
@@ -19,8 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def build_parser() -> ArgumentParser:
-    parser = ArgumentParser(prog="frigate-timelapse")
-    parser.add_argument("--config", required=True, type=Path, help="Path to TOML config file")
+    parser = ArgumentParser(prog="frigate-timelapse-hls")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("show-config", help="Print resolved configuration")
@@ -52,15 +49,13 @@ def load_pipeline(settings: Settings) -> TimelapsePipeline:
 
 
 def _settings_as_dict(settings: Settings) -> dict[str, object]:
-    payload = asdict(settings)
-    payload["paths"] = {key: str(value) for key, value in payload["paths"].items()}
-    return payload
+    return settings.model_dump(mode="json")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    settings = load_settings(args.config)
+    settings = load_settings()
     configure_logging(settings.app.log_level)
     pipeline = load_pipeline(settings)
 
