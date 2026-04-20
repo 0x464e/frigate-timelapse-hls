@@ -10,3 +10,4 @@ __pycache__/
 /work/
 /test_recordings/
 /tests/_generated/
+docker-compose.nginx-dev.yml
