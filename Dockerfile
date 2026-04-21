@@ -1,4 +1,4 @@
-FROM nvidia/cuda:13.2.0-runtime-ubuntu24.04
+FROM debian:trixie-slim
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /bin/
 
 ENV PYTHONUNBUFFERED=1 \
@@ -6,7 +6,9 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH" \
     FTHLS_PATHS_RECORDINGS_SOURCE_ROOT="/recordings" \
     FTHLS_PATHS_STATE_DB="/data/state.sqlite3" \
-    FTHLS_PATHS_OUTPUT_ROOT="/output"
+    FTHLS_PATHS_OUTPUT_ROOT="/output" \
+    NVIDIA_VISIBLE_DEVICES="all" \
+    NVIDIA_DRIVER_CAPABILITIES="compute,video,utility"
 
 WORKDIR /app
 
