@@ -10,3 +10,5 @@ generated. Every time you open the stream with your browser, you can see the cur
 Documentation and instructions TODO.  
 If you stumble across this, want to use it, but can't figure out how, open an issue or whatever, I can write out docs.  
 Currently only supports Frigate, but I could make this into a generic tool for any camera/video feed.
+
+Images are found on Docker Hub: `0x464e/frigate-timelapse-hls`
