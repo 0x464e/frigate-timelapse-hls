@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "frigate-timelapse-hls"
-version = "0.1.0"
+version = "0.2.0"
 description = "Build incremental today-so-far timelapses from Frigate recordings and publish HLS playlists."
 requires-python = ">=3.14"
 dependencies = [
