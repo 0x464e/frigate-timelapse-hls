@@ -75,7 +75,7 @@ class ContinuousFFmpegCommandBuilder:
                 "-hls_playlist_type",
                 "event",
                 "-hls_flags",
-                "append_list+independent_segments+program_date_time+temp_file",
+                "append_list+independent_segments+temp_file",
                 "-hls_segment_filename",
                 "segment-%06d.ts",
                 "live.m3u8",

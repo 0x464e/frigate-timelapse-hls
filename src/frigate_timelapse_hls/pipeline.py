@@ -37,6 +37,40 @@ class TimelapsePipeline:
         self._services = services
         self._active_day: date | None = None
 
+    def stop(self) -> None:
+        if self._active_day is None:
+            if self._services.worker.is_running():
+                self._services.worker.stop()
+            return
+
+        camera = self._services.settings.camera.name
+        day = self._active_day
+        state = self._services.store.get_day_session(camera=camera, day=day)
+        if self._services.worker.is_running():
+            logger.info("Stopping continuous FFmpeg worker for %s", day)
+            self._services.worker.stop()
+        if state is None:
+            return
+
+        stopped_state = SessionState(
+            camera=state.camera,
+            day=state.day,
+            session_start=state.session_start,
+            session_end=state.session_end,
+            status=SessionStatus.STOPPED,
+            mode=state.mode,
+            playlist_path=state.playlist_path,
+            segment_dir=state.segment_dir,
+            last_discovered_clip_id=state.last_discovered_clip_id,
+            last_ingested_clip_id=state.last_ingested_clip_id,
+            discovered_clip_count=state.discovered_clip_count,
+            ingested_clip_count=state.ingested_clip_count,
+            ffmpeg_pid=None,
+            updated_at=datetime.now(tz=self._services.settings.tzinfo),
+        )
+        self._services.store.upsert_day_session(stopped_state)
+        self._publish_snapshot_playlist(stopped_state)
+
     def run_scan(self, now: datetime | None = None) -> LoopResult:
         observed_at = now or datetime.now(tz=self._services.settings.tzinfo)
         existing_state = self._services.store.get_day_session(
@@ -304,7 +338,11 @@ class TimelapsePipeline:
         session_start: datetime,
         existing_state: SessionState | None,
     ) -> datetime:
-        if existing_state is None or existing_state.mode != SessionMode.LIVE_FOLLOW:
+        if (
+            existing_state is None
+            or existing_state.mode != SessionMode.LIVE_FOLLOW
+            or not self._services.worker.is_running()
+        ):
             return session_start
 
         # In steady live-follow mode, only ask Frigate for a short trailing window.
@@ -315,38 +353,94 @@ class TimelapsePipeline:
         return max(session_start, trailing_start)
 
     def _ensure_day_session(self, snapshot: SessionSnapshot) -> None:
-        settings = self._services.settings
+        previous_state = self._services.store.get_day_session(
+            camera=self._services.settings.camera.name,
+            day=snapshot.day,
+        )
+        if previous_state is not None and previous_state.status == SessionStatus.COMPLETED:
+            self._active_day = snapshot.day
+            return
+
         if self._active_day != snapshot.day:
             if self._services.worker.is_running():
                 self._services.worker.stop()
             self._active_day = snapshot.day
-            previous_state = self._services.store.get_day_session(
+            previous_state, session_paths = self._prepare_startup_session(snapshot)
+            self._start_worker(snapshot, session_paths, existing_state=previous_state)
+            return
+        if not self._services.worker.is_running():
+            existing_state, session_paths = self._prepare_startup_session(snapshot)
+            self._start_worker(snapshot, session_paths, existing_state=existing_state)
+
+    def _prepare_startup_session(
+        self,
+        snapshot: SessionSnapshot,
+    ) -> tuple[SessionState | None, LiveSessionPaths]:
+        settings = self._services.settings
+        previous_state = self._services.store.get_day_session(
+            camera=settings.camera.name,
+            day=snapshot.day,
+        )
+        should_resume = previous_state is not None and settings.app.restart_policy == "resume"
+        session_paths = self._services.hls_publisher.prepare_day_session(
+            camera=settings.camera.name,
+            day_label=snapshot.day.isoformat(),
+            output_root=settings.paths.output_root,
+            reset=not should_resume,
+        )
+
+        if previous_state is None:
+            return None, session_paths
+
+        if settings.app.restart_policy == "regenerate":
+            logger.info(
+                "Regenerating interrupted session for %s due to restart_policy=regenerate",
+                snapshot.day,
+            )
+            self._services.store.reset_day_session(
                 camera=settings.camera.name,
                 day=snapshot.day,
             )
-            if previous_state is not None:
-                self._services.store.reset_day_session(
-                    camera=settings.camera.name,
-                    day=snapshot.day,
-                )
-            session_paths = self._services.hls_publisher.prepare_day_session(
+            return None, session_paths
+
+        if not session_paths.live_playlist_path.exists():
+            logger.warning(
+                (
+                    "Cannot resume %s because live.m3u8 is missing; regenerating the "
+                    "day to avoid publishing a broken stream"
+                ),
+                snapshot.day,
+            )
+            self._services.store.reset_day_session(
+                camera=settings.camera.name,
+                day=snapshot.day,
+            )
+            regenerated_paths = self._services.hls_publisher.prepare_day_session(
                 camera=settings.camera.name,
                 day_label=snapshot.day.isoformat(),
                 output_root=settings.paths.output_root,
                 reset=True,
             )
-            self._start_worker(snapshot, session_paths)
-            return
-        if not self._services.worker.is_running():
-            session_paths = self._services.hls_publisher.prepare_day_session(
-                camera=settings.camera.name,
-                day_label=snapshot.day.isoformat(),
-                output_root=settings.paths.output_root,
-                reset=False,
-            )
-            self._start_worker(snapshot, session_paths)
+            return None, regenerated_paths
 
-    def _start_worker(self, snapshot: SessionSnapshot, session_paths: LiveSessionPaths) -> None:
+        self._services.hls_publisher.prepare_live_playlist_for_resume(session_paths)
+        logger.info(
+            (
+                "Resuming interrupted session for %s from stored ingest cursor "
+                "(%s clips already ingested)"
+            ),
+            snapshot.day,
+            previous_state.ingested_clip_count,
+        )
+        return previous_state, session_paths
+
+    def _start_worker(
+        self,
+        snapshot: SessionSnapshot,
+        session_paths: LiveSessionPaths,
+        *,
+        existing_state: SessionState | None,
+    ) -> None:
         self._services.worker.start(
             WorkerSessionPlan(
                 camera=self._services.settings.camera.name,
@@ -363,10 +457,18 @@ class TimelapsePipeline:
             mode=SessionMode.CATCH_UP,
             playlist_path=session_paths.playlist_path,
             segment_dir=session_paths.segment_dir,
-            last_discovered_clip_id=None,
-            last_ingested_clip_id=None,
-            discovered_clip_count=0,
-            ingested_clip_count=0,
+            last_discovered_clip_id=(
+                None if existing_state is None else existing_state.last_discovered_clip_id
+            ),
+            last_ingested_clip_id=(
+                None if existing_state is None else existing_state.last_ingested_clip_id
+            ),
+            discovered_clip_count=(
+                0 if existing_state is None else existing_state.discovered_clip_count
+            ),
+            ingested_clip_count=(
+                0 if existing_state is None else existing_state.ingested_clip_count
+            ),
             ffmpeg_pid=self._services.worker.pid,
             updated_at=snapshot.observed_at,
         )

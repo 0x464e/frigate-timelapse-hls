@@ -18,6 +18,7 @@ services:
       FTHLS_APP_TIMEZONE: Europe/Helsinki
       FTHLS_APP_READY_BUFFER_SECONDS: "30"
       FTHLS_APP_LOG_LEVEL: INFO
+      FTHLS_APP_RESTART_POLICY: resume
       FTHLS_CAMERA_NAME: mycamera
       FTHLS_FRIGATE_BASE_URL: http://192.168.10.6:5000
       FTHLS_FRIGATE_RECORDINGS_ROOT: /media/frigate/recordings

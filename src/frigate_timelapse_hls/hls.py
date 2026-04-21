@@ -73,3 +73,16 @@ class LiveHLSPublisher:
             normalized = f"{normalized}\n#EXT-X-ENDLIST"
         paths.playlist_path.write_text(f"{normalized}\n", encoding="utf-8")
         return paths.playlist_path
+
+    def prepare_live_playlist_for_resume(self, paths: LiveSessionPaths) -> None:
+        if not paths.live_playlist_path.exists():
+            return
+        lines = [
+            line
+            for line in paths.live_playlist_path.read_text(encoding="utf-8").splitlines()
+            if line != "#EXT-X-ENDLIST"
+        ]
+        paths.live_playlist_path.write_text(
+            "\n".join(lines).rstrip() + "\n",
+            encoding="utf-8",
+        )

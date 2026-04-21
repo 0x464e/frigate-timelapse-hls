@@ -4,7 +4,7 @@ import os
 import shlex
 from datetime import date, datetime, time
 from pathlib import Path
-from typing import Annotated, Any, ClassVar
+from typing import Annotated, Any, ClassVar, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -55,6 +55,7 @@ class AppConfig(ConfigModel):
     timezone: str
     ready_buffer_seconds: int = 30
     log_level: str = "INFO"
+    restart_policy: Literal["resume", "regenerate"] = "resume"
 
 
 class CameraConfig(ConfigModel):

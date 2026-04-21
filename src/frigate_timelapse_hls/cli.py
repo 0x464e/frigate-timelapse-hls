@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-import time
+import signal
 from argparse import ArgumentParser
+from threading import Event
 
 from .config import Settings, load_settings
 from .hls import LiveHLSPublisher
@@ -77,10 +78,22 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if args.command == "run-loop":
-        while True:
-            _, sleep_seconds = pipeline.run_loop_iteration()
-            if sleep_seconds > 0:
-                time.sleep(sleep_seconds)
+        stop_requested = Event()
+
+        def request_stop(signum: int, _frame: object) -> None:
+            logger.info("Shutdown requested by signal %s", signum)
+            stop_requested.set()
+
+        signal.signal(signal.SIGINT, request_stop)
+        signal.signal(signal.SIGTERM, request_stop)
+        try:
+            while not stop_requested.is_set():
+                _, sleep_seconds = pipeline.run_loop_iteration()
+                if sleep_seconds > 0:
+                    stop_requested.wait(sleep_seconds)
+        finally:
+            pipeline.stop()
+        return 0
     parser.error(f"Unsupported command: {args.command}")
 
 
