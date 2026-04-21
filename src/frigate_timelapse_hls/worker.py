@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import shlex
 import subprocess
+from collections import deque
 from dataclasses import dataclass
 from threading import Thread
 
@@ -116,6 +118,8 @@ class ContinuousFFmpegWorker:
         self._stdout_thread: Thread | None = None
         self._stderr_thread: Thread | None = None
         self._last_progress_line: str | None = None
+        self._stderr_tail: deque[str] = deque(maxlen=20)
+        self._command: list[str] = []
 
     @property
     def pid(self) -> int | None:
@@ -128,6 +132,8 @@ class ContinuousFFmpegWorker:
         if self.is_running():
             return
         command = self._builder.build(plan)
+        self._command = command
+        self._stderr_tail.clear()
         logger.info("Starting continuous FFmpeg worker for %s", plan.day_label)
         self._process = subprocess.Popen(
             command,
@@ -152,9 +158,12 @@ class ContinuousFFmpegWorker:
 
     def write(self, payload: bytes) -> None:
         if not self.is_running() or self._process is None or self._process.stdin is None:
-            raise RuntimeError("Continuous FFmpeg worker is not running")
-        self._process.stdin.write(payload)
-        self._process.stdin.flush()
+            raise RuntimeError(self._format_process_failure())
+        try:
+            self._process.stdin.write(payload)
+            self._process.stdin.flush()
+        except BrokenPipeError as exc:
+            raise RuntimeError(self._format_process_failure()) from exc
 
     def stop(self) -> None:
         if self._process is None:
@@ -191,4 +200,17 @@ class ContinuousFFmpegWorker:
             except AttributeError:
                 line = str(raw_line).strip()
             if line:
+                self._stderr_tail.append(line)
                 logger.error("ffmpeg: %s", line)
+
+    def _format_process_failure(self) -> str:
+        returncode = None if self._process is None else self._process.poll()
+        message = "Continuous FFmpeg worker is not running"
+        if returncode is not None:
+            message = f"Continuous FFmpeg worker exited with code {returncode}"
+        details = list(self._stderr_tail)
+        if details:
+            message = f"{message}. Recent FFmpeg stderr:\n" + "\n".join(details)
+        if self._command:
+            message = f"{message}\nCommand: {shlex.join(self._command)}"
+        return message
