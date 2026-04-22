@@ -24,6 +24,10 @@ class SourceClip:
         return timedelta(seconds=self.duration_seconds)
 
     @property
+    def source_id(self) -> str:
+        return self.relative_path.as_posix()
+
+    @property
     def ingest_id(self) -> str:
         return (
             f"{self.relative_path.as_posix()}|"

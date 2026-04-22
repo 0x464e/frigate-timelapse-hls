@@ -157,6 +157,18 @@ class StateStore:
             ).fetchall()
         return {str(row["clip_id"]) for row in rows}
 
+    def list_ingested_source_ids(self, *, camera: str, day: date) -> set[str]:
+        with self.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT DISTINCT relative_path
+                FROM ingested_source_clips
+                WHERE camera = ? AND day = ?
+                """,
+                (camera, day.isoformat()),
+            ).fetchall()
+        return {str(row["relative_path"]) for row in rows}
+
     def mark_clip_ingested(
         self,
         *,

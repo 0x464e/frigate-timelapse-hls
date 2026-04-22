@@ -87,13 +87,11 @@ class TimelapsePipeline:
                 session_mode=SessionMode.IDLE,
                 worker_running=self._services.worker.is_running(),
             )
-        ingested_clip_ids = self._services.store.list_ingested_clip_ids(
+        ingested_source_ids = self._services.store.list_ingested_source_ids(
             camera=self._services.settings.camera.name,
             day=snapshot.day,
         )
-        pending_clips = [
-            clip for clip in snapshot.clips if clip.ingest_id not in ingested_clip_ids
-        ]
+        pending_clips = self._filter_pending_clips(snapshot.clips, ingested_source_ids)
         mode = self._resolve_mode(
             observed_at=observed_at,
             session_end=snapshot.session_end,
@@ -149,13 +147,14 @@ class TimelapsePipeline:
         backlog_catchup = False
 
         while True:
-            ingested_clip_ids = self._services.store.list_ingested_clip_ids(
+            ingested_source_ids = self._services.store.list_ingested_source_ids(
                 camera=self._services.settings.camera.name,
                 day=snapshot.day,
             )
-            pending_clips = [
-                clip for clip in snapshot.clips if clip.ingest_id not in ingested_clip_ids
-            ]
+            pending_clips = self._filter_pending_clips(
+                snapshot.clips,
+                ingested_source_ids,
+            )
             latest_discovered_clip = snapshot.clips[-1] if snapshot.clips else None
 
             if not pending_clips:
@@ -200,6 +199,7 @@ class TimelapsePipeline:
                     clip=clip,
                     ingested_at=datetime.now(tz=self._services.settings.tzinfo),
                 )
+                ingested_source_ids.add(clip.source_id)
                 self._publish_snapshot_playlist_for_day(snapshot.day)
                 last_ingested_clip = clip
 
@@ -520,12 +520,12 @@ class TimelapsePipeline:
             playlist_path=playlist_path,
             segment_dir=segment_dir,
             last_discovered_clip_id=(
-                None if latest_discovered_clip is None else latest_discovered_clip.ingest_id
+                None if latest_discovered_clip is None else latest_discovered_clip.source_id
             ),
             last_ingested_clip_id=(
                 existing_state.last_ingested_clip_id
                 if last_ingested_clip is None and existing_state is not None
-                else None if last_ingested_clip is None else last_ingested_clip.ingest_id
+                else None if last_ingested_clip is None else last_ingested_clip.source_id
             ),
             discovered_clip_count=len(snapshot.clips),
             ingested_clip_count=ingested_count,
@@ -619,3 +619,17 @@ class TimelapsePipeline:
         self._services.hls_publisher.publish_snapshot_playlist(
             paths
         )
+
+    @staticmethod
+    def _filter_pending_clips(
+        clips: tuple[SourceClip, ...],
+        ingested_source_ids: set[str],
+    ) -> list[SourceClip]:
+        pending_clips: list[SourceClip] = []
+        seen_source_ids = set(ingested_source_ids)
+        for clip in clips:
+            if clip.source_id in seen_source_ids:
+                continue
+            pending_clips.append(clip)
+            seen_source_ids.add(clip.source_id)
+        return pending_clips
