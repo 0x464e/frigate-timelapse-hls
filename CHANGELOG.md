@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.2](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.2.1...v0.2.2) (2026-04-22)
+
+
+### Bug Fixes
+
+* properly deduplicate already ingested clips ([c649a38](https://github.com/0x464e/frigate-timelapse-hls/commit/c649a387f2ac8f89e6a5841bc56174d76b5a8711))
+
+
+### Continuous Integration
+
+* **release-please:** update version in uv.lock ([9e725c4](https://github.com/0x464e/frigate-timelapse-hls/commit/9e725c44fc886618bda624ddf4aec058071960d7))
+
 ## [0.2.1](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.2.0...v0.2.1) (2026-04-21)
 
 
