@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.2.2...v0.3.0) (2026-11-06)
+
+
+### Features
+
+* add favicon ([64510b2](https://github.com/0x464e/frigate-timelapse-hls/commit/64510b2dfe8fcac9f8eabec66b841859f2feeae3))
+* add mobile playback controls and pinch zoom ([64510b2](https://github.com/0x464e/frigate-timelapse-hls/commit/64510b2dfe8fcac9f8eabec66b841859f2feeae3))
+* add video-first frontend and archive player ([64510b2](https://github.com/0x464e/frigate-timelapse-hls/commit/64510b2dfe8fcac9f8eabec66b841859f2feeae3))
+* publish video library metadata and recording posters ([64510b2](https://github.com/0x464e/frigate-timelapse-hls/commit/64510b2dfe8fcac9f8eabec66b841859f2feeae3))
+
+
+### Miscellaneous Chores
+
+* bump versions ([49d3eb2](https://github.com/0x464e/frigate-timelapse-hls/commit/49d3eb2e89c6a14d17f3517ff5f540aae7fd6b4c))
+
 ## [0.2.2](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.2.1...v0.2.2) (2026-04-22)
 
 
