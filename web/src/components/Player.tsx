@@ -484,6 +484,11 @@ export function Player({ library, day, date, now, onStart }: Props) {
         toggle();
         return;
       }
+      if (portrait) {
+        setCenterRequested(!(controls && centerRequested));
+        showControls();
+        return;
+      }
       if (!portrait && !desiredPlayback.current) {
         clearTimeout(idleTimer.current);
         setControls((value) => !value);
@@ -677,52 +682,54 @@ export function Player({ library, day, date, now, onStart }: Props) {
           />
           {!started && (
             <div className="intro">
-              {!day?.poster_url || posterFailed ? (
-                <Camera
-                  className="placeholder-icon"
-                  size={42}
-                  strokeWidth={1}
-                />
-              ) : null}
-              <span className="eyebrow">
-                {library.camera.replaceAll("_", " ")}{" "}
-                <span className="small-dot" />{" "}
-                {activeToday ? "TODAY, SO FAR" : "FROM THE ARCHIVE"}
-              </span>
-              <h1>{prettyDate(date, true)}</h1>
-              {day?.ready ? (
-                <>
-                  <p>
-                    {formatTime(day.duration)} of the day, ready to explore.
-                  </p>
-                  <button
-                    className="hero-play"
-                    onClick={() => start()}
-                    aria-label="Play timelapse"
-                  >
-                    <Play size={28} fill="currentColor" />{" "}
-                    <span>Play the day</span>
-                  </button>
-                  {hasResume && (
+              <div className="intro-content">
+                {!day?.poster_url || posterFailed ? (
+                  <Camera
+                    className="placeholder-icon"
+                    size={42}
+                    strokeWidth={1}
+                  />
+                ) : null}
+                <span className="eyebrow">
+                  {library.camera.replaceAll("_", " ")}{" "}
+                  <span className="small-dot" />{" "}
+                  {activeToday ? "TODAY, SO FAR" : "FROM THE ARCHIVE"}
+                </span>
+                <h1>{prettyDate(date, true)}</h1>
+                {day?.ready ? (
+                  <>
+                    <p>
+                      {formatTime(day.duration)} of the day, ready to explore.
+                    </p>
                     <button
-                      className="resume-button"
-                      onClick={() => start(clamp(saved, 0, day.duration))}
+                      className="hero-play"
+                      onClick={() => start()}
+                      aria-label="Play timelapse"
                     >
-                      Resume from {formatTime(saved)}{" "}
-                      <ArrowLeft className="resume-arrow" size={14} />
+                      <Play size={28} fill="currentColor" />{" "}
+                      <span>Play the day</span>
                     </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="empty-heading" role="status">
-                    {emptyState(library, date, day, now)}
-                  </p>
-                  <span className="intro-note">
-                    The player will be ready when footage is available.
-                  </span>
-                </>
-              )}
+                    {hasResume && (
+                      <button
+                        className="resume-button"
+                        onClick={() => start(clamp(saved, 0, day.duration))}
+                      >
+                        Resume from {formatTime(saved)}{" "}
+                        <ArrowLeft className="resume-arrow" size={14} />
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="empty-heading" role="status">
+                      {emptyState(library, date, day, now)}
+                    </p>
+                    <span className="intro-note">
+                      The player will be ready when footage is available.
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           )}
           {boosting && (

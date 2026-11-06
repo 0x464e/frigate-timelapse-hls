@@ -41,4 +41,19 @@ export default function setup() {
     ],
     { timeout: 30000 },
   );
+  execFileSync(
+    "ffmpeg",
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+      "-i",
+      `${directory}index.m3u8`,
+      "-frames:v",
+      "1",
+      `${directory}poster.jpg`,
+    ],
+    { timeout: 10000 },
+  );
 }

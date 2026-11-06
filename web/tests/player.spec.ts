@@ -82,12 +82,13 @@ const makeDay = (value: string): Day => ({
   schedule_end: null,
   render_speed: 288,
 });
-async function fixture(page: Page, growing = false) {
+async function fixture(page: Page, growing = false, poster = false) {
   let broken = false;
   let failedSegments = 0;
   let segments = growing ? 3 : 12;
   let complete = !growing;
   const day = makeDay(date);
+  if (poster) day.poster_url = `/published/test/${date}/poster.jpg`;
   day.duration = segments;
   day.complete = complete;
   day.stream_ended = complete;
@@ -109,6 +110,11 @@ async function fixture(page: Page, growing = false) {
     if (url.pathname.endsWith("library.json"))
       return route.fulfill({ json: library });
     media.push(url.pathname + url.search);
+    if (url.pathname.endsWith("poster.jpg"))
+      return route.fulfill({
+        body: readFileSync(`${directory}poster.jpg`),
+        contentType: "image/jpeg",
+      });
     if (url.pathname.endsWith(".m3u8")) {
       if (broken)
         return route.fulfill({
@@ -826,7 +832,7 @@ test("loading status is centered over the player", async ({ page }) => {
   }
 });
 
-test("mobile taps reveal transport, portrait chrome stays visible, and Play fades quickly", async ({
+test("mobile taps toggle portrait transport while playing or paused; Play fades quickly", async ({
   page,
   isMobile,
 }) => {
@@ -846,8 +852,28 @@ test("mobile taps reveal transport, portrait chrome stays visible, and Play fade
   await expect(page.locator(".player-bottom")).toHaveCSS("opacity", "1");
   await revealMobileControls(page);
   expect((await videoState(page)).paused).toBe(false);
+  await expect(page.locator(".center-play")).toHaveAttribute(
+    "aria-hidden",
+    "false",
+  );
+  await revealMobileControls(page);
+  await expect(page.locator(".center-play")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  expect((await videoState(page)).paused).toBe(false);
+  await expect(page.locator(".player-bottom")).toHaveCSS("opacity", "1");
+  await revealMobileControls(page);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect.poll(async () => (await videoState(page)).paused).toBe(true);
+  await revealMobileControls(page);
+  await expect(page.locator(".center-play")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  expect((await videoState(page)).paused).toBe(true);
+  await expect(page.locator(".player-bottom")).toHaveCSS("opacity", "1");
+  await revealMobileControls(page);
   await page.waitForTimeout(3000);
   await expect(
     page.getByRole("button", { name: "Play", exact: true }),
@@ -863,6 +889,63 @@ test("mobile taps reveal transport, portrait chrome stays visible, and Play fade
   const stage = (await page.locator(".media-stage").boundingBox())!;
   const controls = (await page.locator(".player-bottom").boundingBox())!;
   expect(stage.y + stage.height).toBeLessThanOrEqual(controls.y + 1);
+});
+
+test("portrait landing text and Resume fit inside and center on the poster", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(!isMobile, "Portrait mobile layout");
+  const { media } = await fixture(page, false, true);
+  await page.addInitScript(
+    ({ date }) => {
+      localStorage.setItem(`timelapse.position.test.${date}.test-one`, "5");
+    },
+    { date },
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: /^Resume from/ }),
+  ).toBeVisible();
+  await page
+    .locator(".poster")
+    .evaluate((image) => (image as HTMLImageElement).decode());
+  for (const size of [
+    { width: 393, height: 851 },
+    { width: 393, height: 740 },
+    { width: 320, height: 720 },
+  ]) {
+    await page.setViewportSize(size);
+    const geometry = await page.locator(".poster").evaluate((image) => {
+      const poster = image as HTMLImageElement;
+      const box = poster.getBoundingClientRect();
+      const fit = Math.min(
+        box.width / poster.naturalWidth,
+        box.height / poster.naturalHeight,
+      );
+      const content = document
+        .querySelector(".intro-content")!
+        .getBoundingClientRect();
+      return {
+        center: box.y + box.height / 2,
+        height: poster.naturalHeight * fit,
+        contentTop: content.top,
+        contentBottom: content.bottom,
+      };
+    });
+    expect(
+      Math.abs(
+        (geometry.contentTop + geometry.contentBottom) / 2 - geometry.center,
+      ),
+    ).toBeLessThan(1);
+    expect(geometry.contentTop).toBeGreaterThanOrEqual(
+      geometry.center - geometry.height / 2 - 1,
+    );
+    expect(geometry.contentBottom).toBeLessThanOrEqual(
+      geometry.center + geometry.height / 2 + 1,
+    );
+  }
+  expect(media.some((url) => /\.(m3u8|ts)(?:\?|$)/.test(url))).toBe(false);
 });
 
 test("paused mobile landscape can hide and restore the whole interface", async ({

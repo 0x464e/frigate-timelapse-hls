@@ -83,9 +83,10 @@ ten seconds while visible. A one-off `publish-library` does not keep polling.
   the speed button, Escape, or a tap outside. The cog beside Archive opens settings.
 - Hold the video to temporarily double playback speed, capped at 4×. Releasing or
   cancelling restores the selected speed. This does not change the rendering speed.
-- On mobile, portrait controls remain visible outside the video area; the center
-  button fades while playing and remains visible while paused. In paused landscape,
-  tapping outside the controls hides or restores the entire interface.
+- On mobile, portrait controls remain visible outside the video area. Tap the video
+  to show or hide the center button, both while playing and paused. It also fades
+  automatically while playing. In paused landscape, tapping outside the controls
+  hides or restores the entire interface.
 - Pinch to zoom on mobile, then pan with one finger. Zoom keeps the video proportions
   and can fill the portrait video area without covering the permanent controls.
   Double-tap seeking still works when zoomed; hold-to-boost is disabled. **Reset zoom**

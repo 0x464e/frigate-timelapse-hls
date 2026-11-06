@@ -291,7 +291,7 @@ a.icon-button:hover {
 .intro {
   position: absolute;
   z-index: 1;
-  inset: 17% 16px 27%;
+  inset: 0 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -299,6 +299,25 @@ a.icon-button:hover {
   text-align: center;
   pointer-events: none;
   text-shadow: 0 2px 25px #0008;
+}
+.intro-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+}
+.touch-player.portrait-player .intro h1 {
+  font-size: clamp(21px, 6vw, 26px);
+  margin: 8px 0 6px;
+}
+.touch-player.portrait-player .hero-play {
+  min-height: 48px;
+  padding: 10px 22px;
+  margin-top: 14px;
+}
+.touch-player.portrait-player .resume-button {
+  min-height: 30px;
+  margin-top: 6px;
 }
 .intro:before {
   content: "";
@@ -1286,7 +1305,7 @@ a.icon-button:hover {
     margin-top: 0;
   }
   .intro {
-    inset: 20% 10px 23%;
+    inset: 0 10px;
   }
   .intro h1 {
     font-size: 26px;
