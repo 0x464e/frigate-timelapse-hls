@@ -14,12 +14,14 @@ import {
   PictureInPicture2,
   Play,
   Settings,
+  ZoomOut,
   SkipBack,
   X,
 } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -39,6 +41,9 @@ import {
 import type { Day, Library } from "../types";
 import { SpeedPopover } from "./SpeedPopover";
 import { Timeline } from "./Timeline";
+import { useMediaQuery } from "../useMediaQuery";
+import { useVideoZoom } from "../useVideoZoom";
+import { GESTURE_SLOP } from "../zoom";
 
 interface Props {
   library: Library;
@@ -55,6 +60,7 @@ type OrientationLock = ScreenOrientation & {
 export function Player({ library, day, date, now, onStart }: Props) {
   const video = useRef<HTMLVideoElement>(null);
   const shell = useRef<HTMLDivElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
   const desiredPlayback = useRef(false);
   const initialPosition = useRef(0);
   const position = useRef(0);
@@ -75,11 +81,15 @@ export function Player({ library, day, date, now, onStart }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [speedOpen, setSpeedOpen] = useState(false);
   const [controls, setControls] = useState(true);
+  const [centerRequested, setCenterRequested] = useState(false);
   const [scrubbing, setScrubbing] = useState(false);
   const [full, setFull] = useState(false);
   const [pip, setPip] = useState(false);
   const [notice, setNotice] = useState("");
   const [posterFailed, setPosterFailed] = useState(false);
+  const mobile = useMediaQuery("(pointer: coarse)");
+  const portrait = useMediaQuery("(orientation: portrait)");
+  const zoom = useVideoZoom(mobile && started, stage, video);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -129,11 +139,30 @@ export function Player({ library, day, date, now, onStart }: Props) {
     },
     [duration],
   );
-  const showControls = useCallback(() => {
+  const showControls = useCallback((delay = 2800) => {
     setControls(true);
     clearTimeout(idleTimer.current);
-    idleTimer.current = setTimeout(() => setControls(false), 2800);
+    if (desiredPlayback.current)
+      idleTimer.current = setTimeout(() => setControls(false), delay);
   }, []);
+  useEffect(() => {
+    showControls();
+  }, [mobile, portrait, showControls]);
+  useLayoutEffect(() => {
+    if (!mobile || !started || !shell.current) return;
+    const root = shell.current;
+    const nav = root.querySelector<HTMLElement>(".watch-nav")!;
+    const bottom = root.querySelector<HTMLElement>(".player-bottom")!;
+    const measure = () => {
+      root.style.setProperty("--header-height", `${nav.offsetHeight}px`);
+      root.style.setProperty("--controls-height", `${bottom.offsetHeight}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(nav);
+    observer.observe(bottom);
+    return () => observer.disconnect();
+  }, [mobile, started]);
   const showSpeed = useCallback(
     (open: boolean) => {
       setSpeedOpen(open);
@@ -149,7 +178,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
     setStarted(true);
     setWaiting(true);
     setPaused(false);
-    showControls();
+    showControls(mobile ? 600 : 2800);
   };
   const toggle = () => {
     const element = video.current;
@@ -162,7 +191,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
       element.pause();
       setPaused(true);
     }
-    showControls();
+    showControls(mobile ? 600 : 2800);
   };
   const cancelBoost = useCallback(() => {
     clearTimeout(holdTimer.current);
@@ -408,7 +437,13 @@ export function Player({ library, day, date, now, onStart }: Props) {
   const pointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!day?.ready || settingsOpen || event.button !== 0) return;
     clearTimeout(tapTimer.current);
-    showControls();
+    if (zoom.down(event)) {
+      cancelBoost();
+      lastTap.current = null;
+      gesture.current = null;
+      return;
+    }
+    if (!mobile) showControls();
     gesture.current = {
       x: event.clientX,
       y: event.clientY,
@@ -417,21 +452,23 @@ export function Player({ library, day, date, now, onStart }: Props) {
       moved: false,
     };
     clearTimeout(holdTimer.current);
-    holdTimer.current = setTimeout(() => {
-      if (!gesture.current || gesture.current.moved) return;
-      gesture.current.held = true;
-      lastTap.current = null;
-      if (started && desiredPlayback.current && speed < 40) setBoosting(true);
-    }, 450);
+    if (!zoom.isZoomed())
+      holdTimer.current = setTimeout(() => {
+        if (!gesture.current || gesture.current.moved) return;
+        gesture.current.held = true;
+        lastTap.current = null;
+        if (started && desiredPlayback.current && speed < 40) setBoosting(true);
+      }, 450);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const pointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     const current = gesture.current;
     gesture.current = null;
     cancelBoost();
+    if (zoom.up(event)) return;
     if (!current || current.held || current.moved) return;
     if (!started) {
-      start();
+      if (!mobile) start();
       return;
     }
     const rect = event.currentTarget.getBoundingClientRect();
@@ -442,6 +479,17 @@ export function Player({ library, day, date, now, onStart }: Props) {
           ? "right"
           : "center";
     const at = performance.now();
+    const tap = () => {
+      if (!mobile) {
+        toggle();
+        return;
+      }
+      if (!portrait && !desiredPlayback.current) {
+        clearTimeout(idleTimer.current);
+        setControls((value) => !value);
+      } else showControls();
+      setCenterRequested(true);
+    };
     if (
       lastTap.current &&
       at - lastTap.current.at < 320 &&
@@ -457,28 +505,30 @@ export function Player({ library, day, date, now, onStart }: Props) {
       // Give a side tap time to become a double-tap seek without pausing first.
       if (side === "center") {
         lastTap.current = null;
-        toggle();
+        tap();
       } else {
         tapTimer.current = setTimeout(() => {
           lastTap.current = null;
-          toggle();
+          tap();
         }, 320);
       }
     }
   };
   const visibleControls =
     controls ||
-    paused ||
+    (mobile ? portrait : paused) ||
     settingsOpen ||
     speedOpen ||
     scrubbing ||
     !started ||
     Boolean(error);
+  const centerVisible =
+    controls && centerRequested && !settingsOpen && !speedOpen && !error;
   return (
     <VideoPlayer>
       <Container
         ref={shell}
-        className={`player-shell ${visibleControls ? "" : "controls-hidden"}`}
+        className={`player-shell ${started ? "started" : ""} ${mobile ? "touch-player" : ""} ${portrait ? "portrait-player" : ""} ${visibleControls ? "" : "controls-hidden"}`}
         tabIndex={0}
         aria-label={`${library.camera} timelapse for ${date}`}
         onPointerDownCapture={(event) => {
@@ -489,12 +539,19 @@ export function Player({ library, day, date, now, onStart }: Props) {
           ) {
             clearTimeout(tapTimer.current);
             lastTap.current = null;
+            showControls();
+            if (!(event.target as HTMLElement).closest(".center-play"))
+              setCenterRequested(false);
           }
         }}
         onPointerMove={(event) => {
           if (event.pointerType === "mouse") showControls();
         }}
-        onFocusCapture={showControls}
+        onFocusCapture={(event) => {
+          // Touch-generated focus arrives after pointerup; it must not undo hiding the UI.
+          if ((event.target as HTMLElement).matches(":focus-visible"))
+            showControls();
+        }}
         onKeyDown={(event) => {
           if (
             settingsOpen ||
@@ -517,84 +574,207 @@ export function Player({ library, day, date, now, onStart }: Props) {
           }
         }}
       >
-        {day?.poster_url && !posterFailed && !started && (
-          <img
-            className="poster"
-            src={day.poster_url}
-            alt=""
-            onError={() => setPosterFailed(true)}
-          />
-        )}
-        {started && (
-          <Video
-            ref={video}
-            className="video"
-            playsInline
-            muted
-            preload="none"
-            onTimeUpdate={() => {
-              const value = video.current?.currentTime ?? 0;
-              position.current = value;
-              setTime(value);
-            }}
-            onDurationChange={measure}
-            onProgress={measure}
-            onLoadedMetadata={measure}
-            onPlay={() => {
-              desiredPlayback.current = true;
-              setPaused(false);
-              showControls();
-            }}
-            onPause={() => {
-              // Native PiP/media-key pauses must remain pauses when new footage arrives.
-              if (!loadingSource.current && !video.current?.ended)
-                desiredPlayback.current = false;
-              setPaused(true);
-              cancelBoost();
-            }}
-            onPlaying={() => {
-              loadingSource.current = false;
-              setWaiting(false);
-              setPaused(false);
-            }}
-            onWaiting={() => setWaiting(true)}
-            onEnded={() => {
-              if (isGrowing && !day?.complete && !day?.stream_ended)
-                setWaiting(true);
-              else {
-                setPaused(true);
-                if (day?.complete || !activeToday)
+        <div
+          ref={stage}
+          className={`media-stage ${mobile && centerVisible ? "center-controls-visible" : ""}`}
+        >
+          {day?.poster_url && !posterFailed && !started && (
+            <img
+              className="poster"
+              src={day.poster_url}
+              alt=""
+              onError={() => setPosterFailed(true)}
+            />
+          )}
+          {started && (
+            <Video
+              ref={video}
+              className="video"
+              style={zoom.style}
+              playsInline
+              muted
+              preload="none"
+              onTimeUpdate={() => {
+                const value = video.current?.currentTime ?? 0;
+                position.current = value;
+                setTime(value);
+              }}
+              onDurationChange={measure}
+              onProgress={measure}
+              onLoadedMetadata={() => {
+                measure();
+                zoom.measure();
+              }}
+              onPlay={() => {
+                desiredPlayback.current = true;
+                setPaused(false);
+                setCenterRequested(false);
+                showControls(mobile ? 600 : 2800);
+              }}
+              onPause={() => {
+                // Native PiP/media-key pauses must remain pauses when new footage arrives.
+                if (!loadingSource.current && !video.current?.ended)
                   desiredPlayback.current = false;
+                setPaused(true);
+                setCenterRequested(true);
+                cancelBoost();
+                showControls();
+              }}
+              onPlaying={() => {
+                loadingSource.current = false;
+                setWaiting(false);
+                setPaused(false);
+              }}
+              onWaiting={() => setWaiting(true)}
+              onEnded={() => {
+                if (isGrowing && !day?.complete && !day?.stream_ended)
+                  setWaiting(true);
+                else {
+                  setPaused(true);
+                  if (day?.complete || !activeToday)
+                    desiredPlayback.current = false;
+                  showControls();
+                }
+              }}
+            />
+          )}
+          <div
+            className="gesture-surface"
+            data-testid="gesture-surface"
+            onPointerDown={pointerDown}
+            onPointerMove={(event) => {
+              if (zoom.move(event)) {
+                gesture.current = null;
+                lastTap.current = null;
+                clearTimeout(tapTimer.current);
+                cancelBoost();
+                return;
+              }
+              const current = gesture.current;
+              if (
+                current &&
+                Math.hypot(
+                  event.clientX - current.x,
+                  event.clientY - current.y,
+                ) > GESTURE_SLOP
+              ) {
+                current.moved = true;
+                cancelBoost();
               }
             }}
-          />
-        )}
-        <div
-          className="gesture-surface"
-          data-testid="gesture-surface"
-          onPointerDown={pointerDown}
-          onPointerMove={(event) => {
-            const current = gesture.current;
-            if (
-              current &&
-              Math.hypot(event.clientX - current.x, event.clientY - current.y) >
-                14
-            ) {
-              current.moved = true;
+            onPointerUp={pointerUp}
+            onPointerCancel={(event) => {
+              zoom.up(event);
+              gesture.current = null;
               cancelBoost();
-            }
-          }}
-          onPointerUp={pointerUp}
-          onPointerCancel={() => {
-            gesture.current = null;
-            cancelBoost();
-          }}
-          onLostPointerCapture={() => {
-            gesture.current = null;
-            cancelBoost();
-          }}
-          onContextMenu={(event) => event.preventDefault()}
-        />
+            }}
+            onLostPointerCapture={(event) => {
+              zoom.up(event);
+              gesture.current = null;
+              cancelBoost();
+            }}
+            onContextMenu={(event) => event.preventDefault()}
+          />
+          {!started && (
+            <div className="intro">
+              {!day?.poster_url || posterFailed ? (
+                <Camera
+                  className="placeholder-icon"
+                  size={42}
+                  strokeWidth={1}
+                />
+              ) : null}
+              <span className="eyebrow">
+                {library.camera.replaceAll("_", " ")}{" "}
+                <span className="small-dot" />{" "}
+                {activeToday ? "TODAY, SO FAR" : "FROM THE ARCHIVE"}
+              </span>
+              <h1>{prettyDate(date, true)}</h1>
+              {day?.ready ? (
+                <>
+                  <p>
+                    {formatTime(day.duration)} of the day, ready to explore.
+                  </p>
+                  <button
+                    className="hero-play"
+                    onClick={() => start()}
+                    aria-label="Play timelapse"
+                  >
+                    <Play size={28} fill="currentColor" />{" "}
+                    <span>Play the day</span>
+                  </button>
+                  {hasResume && (
+                    <button
+                      className="resume-button"
+                      onClick={() => start(clamp(saved, 0, day.duration))}
+                    >
+                      Resume from {formatTime(saved)}{" "}
+                      <ArrowLeft className="resume-arrow" size={14} />
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="empty-heading" role="status">
+                    {emptyState(library, date, day, now)}
+                  </p>
+                  <span className="intro-note">
+                    The player will be ready when footage is available.
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+          {boosting && (
+            <div className="boost-badge">
+              <FastForward size={17} />{" "}
+              {(Math.min(speed * 2, 40) / 10).toFixed(1)}×
+            </div>
+          )}
+          {notice && (
+            <div className="notice" role="status">
+              {notice}
+            </div>
+          )}
+          {started && waiting && !paused && !error && (
+            <div className="waiting-badge" role="status">
+              <span className="pulse-dot" />
+              {isGrowing && time >= duration - 1
+                ? "Waiting for more footage"
+                : "Loading your timelapse"}
+            </div>
+          )}
+          {error && (
+            <div className="player-error" role="alert">
+              <p>{error}</p>
+              <button
+                className="primary-button"
+                onClick={() => {
+                  initialPosition.current = position.current;
+                  desiredPlayback.current = true;
+                  setRetry((value) => value + 1);
+                }}
+              >
+                Retry playback
+              </button>
+            </div>
+          )}
+          {mobile && started && (
+            <button
+              className={`center-play ${centerVisible ? "" : "center-play-hidden"}`}
+              aria-label={paused ? "Play" : "Pause"}
+              aria-hidden={!centerVisible}
+              tabIndex={centerVisible ? 0 : -1}
+              onClick={toggle}
+            >
+              {paused ? (
+                <Play fill="currentColor" />
+              ) : (
+                <Pause fill="currentColor" />
+              )}
+            </button>
+          )}
+        </div>
         <header className="watch-nav chrome">
           <Link to="/" className="brand" aria-label="Timelapse today">
             <Film />
@@ -617,84 +797,6 @@ export function Player({ library, day, date, now, onStart }: Props) {
             </button>
           </div>
         </header>
-        {!started && (
-          <div className="intro">
-            {!day?.poster_url || posterFailed ? (
-              <Camera className="placeholder-icon" size={42} strokeWidth={1} />
-            ) : null}
-            <span className="eyebrow">
-              {library.camera.replaceAll("_", " ")}{" "}
-              <span className="small-dot" />{" "}
-              {activeToday ? "TODAY, SO FAR" : "FROM THE ARCHIVE"}
-            </span>
-            <h1>{prettyDate(date, true)}</h1>
-            {day?.ready ? (
-              <>
-                <p>{formatTime(day.duration)} of the day, ready to explore.</p>
-                <button
-                  className="hero-play"
-                  onClick={() => start()}
-                  aria-label="Play timelapse"
-                >
-                  <Play size={28} fill="currentColor" />{" "}
-                  <span>Play the day</span>
-                </button>
-                {hasResume && (
-                  <button
-                    className="resume-button"
-                    onClick={() => start(clamp(saved, 0, day.duration))}
-                  >
-                    Resume from {formatTime(saved)}{" "}
-                    <ArrowLeft className="resume-arrow" size={14} />
-                  </button>
-                )}
-              </>
-            ) : (
-              <>
-                <p className="empty-heading" role="status">
-                  {emptyState(library, date, day, now)}
-                </p>
-                <span className="intro-note">
-                  The player will be ready when footage is available.
-                </span>
-              </>
-            )}
-          </div>
-        )}
-        {boosting && (
-          <div className="boost-badge">
-            <FastForward size={17} />{" "}
-            {(Math.min(speed * 2, 40) / 10).toFixed(1)}×
-          </div>
-        )}
-        {notice && (
-          <div className="notice" role="status">
-            {notice}
-          </div>
-        )}
-        {started && waiting && !error && (
-          <div className="waiting-badge" role="status">
-            <span className="pulse-dot" />
-            {isGrowing && time >= duration - 1
-              ? "Waiting for more footage"
-              : "Loading your timelapse"}
-          </div>
-        )}
-        {error && (
-          <div className="player-error" role="alert">
-            <p>{error}</p>
-            <button
-              className="primary-button"
-              onClick={() => {
-                initialPosition.current = position.current;
-                desiredPlayback.current = true;
-                setRetry((value) => value + 1);
-              }}
-            >
-              Retry playback
-            </button>
-          </div>
-        )}
         {started && (
           <div className="player-bottom chrome">
             <Timeline
@@ -707,20 +809,22 @@ export function Player({ library, day, date, now, onStart }: Props) {
             />
             <div className="control-bar">
               <div className="control-group">
-                <PlayButton
-                  className="icon-button"
-                  aria-label={paused ? "Play" : "Pause"}
-                  onClick={() => {
-                    desiredPlayback.current = paused;
-                    showControls();
-                  }}
-                >
-                  {paused ? (
-                    <Play fill="currentColor" />
-                  ) : (
-                    <Pause fill="currentColor" />
-                  )}
-                </PlayButton>
+                {!mobile && (
+                  <PlayButton
+                    className="icon-button"
+                    aria-label={paused ? "Play" : "Pause"}
+                    onClick={() => {
+                      desiredPlayback.current = paused;
+                      showControls();
+                    }}
+                  >
+                    {paused ? (
+                      <Play fill="currentColor" />
+                    ) : (
+                      <Pause fill="currentColor" />
+                    )}
+                  </PlayButton>
+                )}
                 <button
                   className="icon-button"
                   aria-label="Start over"
@@ -728,6 +832,19 @@ export function Player({ library, day, date, now, onStart }: Props) {
                 >
                   <SkipBack size={19} />
                 </button>
+                {mobile && zoom.zoomed && (
+                  <button
+                    className="icon-button"
+                    aria-label="Reset zoom"
+                    title="Reset zoom"
+                    onClick={() => {
+                      zoom.reset();
+                      showControls();
+                    }}
+                  >
+                    <ZoomOut size={20} />
+                  </button>
+                )}
                 <button
                   className="latest-button"
                   aria-label="Jump to latest available footage"
@@ -828,8 +945,11 @@ export function Player({ library, day, date, now, onStart }: Props) {
               <div className="gesture-help">
                 <CircleHelp size={17} />
                 <p>
-                  Tap to play or pause. Double-tap either side to skip. Hold the
-                  video to speed up. Use ← / → on a keyboard.
+                  {mobile
+                    ? "Tap the video to show playback controls. Pinch to zoom and drag to pan. "
+                    : "Click the video to play or pause. "}
+                  Double-tap either side to skip. Hold the video to speed up
+                  when not zoomed in. Use ← / → on a keyboard.
                 </p>
               </div>
             </Dialog.Content>

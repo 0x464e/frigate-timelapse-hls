@@ -185,6 +185,17 @@ a.icon-button:hover {
   height: 100dvh;
   min-height: 0;
 }
+.media-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: #0b0d0c;
+}
+.touch-player.portrait-player.started .media-stage {
+  top: var(--header-height, 76px);
+  bottom: var(--controls-height, 102px);
+}
 .video,
 .poster {
   position: absolute;
@@ -205,6 +216,37 @@ a.icon-button:hover {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+.touch-player .gesture-surface {
+  touch-action: none;
+}
+.center-play {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #101510b3;
+  border: 1px solid #ffffff35;
+  backdrop-filter: blur(8px);
+  transition: opacity 0.18s;
+}
+.center-play svg {
+  width: 30px;
+  height: 30px;
+}
+.center-play-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.center-controls-visible .waiting-badge,
+.center-controls-visible .notice {
+  top: calc(50% + 62px);
 }
 .watch-nav {
   position: absolute;
@@ -238,6 +280,9 @@ a.icon-button:hover {
 }
 .controls-hidden .chrome {
   opacity: 0;
+  pointer-events: none;
+}
+.controls-hidden .chrome * {
   pointer-events: none;
 }
 .controls-hidden {
@@ -358,7 +403,7 @@ a.icon-button:hover {
   display: flex;
   gap: 8px;
   align-items: center;
-  padding: 0 10px;
+  padding: 0 8px;
   min-height: 44px;
   font-size: 11px;
 }

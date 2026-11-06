@@ -4,6 +4,55 @@ import { fileURLToPath } from "node:url";
 import type { Library, Day } from "../src/types";
 
 const directory = fileURLToPath(new URL("./_generated/", import.meta.url));
+const videoState = (page: Page) =>
+  page.locator("video").evaluate((video) => {
+    const element = video as HTMLVideoElement;
+    const transform = new DOMMatrix(getComputedStyle(element).transform);
+    return {
+      paused: element.paused,
+      time: element.currentTime,
+      rate: element.playbackRate,
+      scale: transform.a,
+      scaleY: transform.d,
+      x: transform.e,
+      y: transform.f,
+    };
+  });
+async function pinch(page: Page) {
+  const box = (await page.getByTestId("gesture-surface").boundingBox())!;
+  const session = await page.context().newCDPSession(page);
+  const touches = (spread: number) =>
+    [-1, 1].map((side, index) => ({
+      id: index + 1,
+      x: box.x + box.width / 2 + side * spread,
+      y: box.y + box.height * 0.4,
+    }));
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: touches(30),
+  });
+  for (let i = 1; i <= 8; i++) {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: touches(30 + 14 * i),
+    });
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+  }
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await session.detach();
+}
+async function revealMobileControls(page: Page) {
+  if (await page.locator(".touch-player").count()) {
+    const surface = page.getByTestId("gesture-surface");
+    const box = (await surface.boundingBox())!;
+    await surface.tap({
+      position: { x: box.width * 0.5, y: box.height * 0.25 },
+    });
+  }
+}
 const pageErrors = new WeakMap<Page, string[]>();
 test.beforeEach(({ page }) => {
   const errors: string[] = [];
@@ -340,7 +389,7 @@ test("hold speed is temporary and cancellation restores the rate", async ({
     .toBeGreaterThan(0);
   const surface = page.getByTestId("gesture-surface");
   const box = (await surface.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.4);
   await page.mouse.down();
   await expect
     .poll(() =>
@@ -437,6 +486,7 @@ test("new segments preserve a user pause", async ({ page }) => {
         .evaluate((v) => (v as HTMLVideoElement).currentTime),
     )
     .toBeGreaterThan(0);
+  await revealMobileControls(page);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   const at = await page
     .locator("video")
@@ -649,6 +699,10 @@ test("single taps toggle playback and double taps seek without toggling it", asy
   page,
   isMobile,
 }) => {
+  test.skip(
+    isMobile,
+    "Mobile taps reveal the center transport instead of toggling playback",
+  );
   await fixture(page);
   await page.goto("/");
   const surface = page.getByTestId("gesture-surface");
@@ -717,6 +771,7 @@ test("portrait PiP stays visible and landscape controls use only two compact row
         .evaluate((v) => (v as HTMLVideoElement).currentTime),
     )
     .toBeGreaterThan(0);
+  await revealMobileControls(page);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Picture in picture" }),
@@ -762,11 +817,174 @@ test("loading status is centered over the player", async ({ page }) => {
   try {
     await expect(status).toBeVisible();
     const message = (await status.boundingBox())!;
-    const player = (await page.locator(".player-shell").boundingBox())!;
+    const player = (await page.locator(".media-stage").boundingBox())!;
     expect(
       Math.abs(message.y + message.height / 2 - player.y - player.height / 2),
     ).toBeLessThan(1);
   } finally {
     release();
   }
+});
+
+test("mobile taps reveal transport, portrait chrome stays visible, and Play fades quickly", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(!isMobile, "Mobile-only controls");
+  await fixture(page);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Play timelapse", exact: true })
+    .click();
+  await expect
+    .poll(async () => (await videoState(page)).time)
+    .toBeGreaterThan(0);
+  await expect(page.locator(".center-play")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  await expect(page.locator(".player-bottom")).toHaveCSS("opacity", "1");
+  await revealMobileControls(page);
+  expect((await videoState(page)).paused).toBe(false);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect.poll(async () => (await videoState(page)).paused).toBe(true);
+  await page.waitForTimeout(3000);
+  await expect(
+    page.getByRole("button", { name: "Play", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(page.locator(".center-play")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+    { timeout: 1500 },
+  );
+  await expect(page.locator(".player-bottom")).toHaveCSS("opacity", "1");
+  await expect(page.locator(".watch-nav")).toHaveCSS("opacity", "1");
+  const stage = (await page.locator(".media-stage").boundingBox())!;
+  const controls = (await page.locator(".player-bottom").boundingBox())!;
+  expect(stage.y + stage.height).toBeLessThanOrEqual(controls.y + 1);
+});
+
+test("paused mobile landscape can hide and restore the whole interface", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(!isMobile, "Mobile-only controls");
+  await page.setViewportSize({ width: 851, height: 393 });
+  await fixture(page);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Play timelapse", exact: true })
+    .click();
+  await expect
+    .poll(async () => (await videoState(page)).time)
+    .toBeGreaterThan(0);
+  await revealMobileControls(page);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await revealMobileControls(page);
+  await expect(page.locator(".player-bottom")).toHaveCSS("opacity", "0");
+  await expect(page.locator(".watch-nav")).toHaveCSS("opacity", "0");
+  await expect(page.locator(".center-play")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  expect((await videoState(page)).paused).toBe(true);
+  await revealMobileControls(page);
+  await expect(page.locator(".player-bottom")).toHaveCSS("opacity", "1");
+  await expect(
+    page.getByRole("button", { name: "Play", exact: true }),
+  ).toBeVisible();
+});
+
+test("mobile pinch fills portrait, pans without seeking, and resets from the bottom controls", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(!isMobile, "Mobile-only zoom");
+  await fixture(page);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Play timelapse", exact: true })
+    .click();
+  await expect
+    .poll(async () => (await videoState(page)).time)
+    .toBeGreaterThan(0);
+  await revealMobileControls(page);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  const at = (await videoState(page)).time;
+  await pinch(page);
+  const zoomed = await videoState(page);
+  expect(zoomed.scale).toBeGreaterThan(3);
+  expect(zoomed.scale).toBeCloseTo(zoomed.scaleY);
+  expect(zoomed.paused).toBe(true);
+  const box = (await page.getByTestId("gesture-surface").boundingBox())!;
+  expect((box.width / (16 / 9)) * zoomed.scale).toBeGreaterThanOrEqual(
+    box.height,
+  );
+  const session = await page.context().newCDPSession(page);
+  const point = {
+    id: 1,
+    x: box.x + box.width * 0.25,
+    y: box.y + box.height * 0.25,
+  };
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [point],
+  });
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [{ ...point, x: point.x + 70, y: point.y - 70 }],
+  });
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  const panned = await videoState(page);
+  expect(panned.x).not.toBeCloseTo(zoomed.x);
+  expect(panned.time).toBeCloseTo(at, 1);
+  const surface = page.getByTestId("gesture-surface");
+  await surface.tap({ position: { x: box.width * 0.8, y: box.height * 0.4 } });
+  await surface.tap({ position: { x: box.width * 0.8, y: box.height * 0.4 } });
+  await expect
+    .poll(async () => (await videoState(page)).time)
+    .toBeGreaterThan(4);
+  expect((await videoState(page)).paused).toBe(true);
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [point],
+  });
+  await page.waitForTimeout(650);
+  expect((await videoState(page)).rate).toBe(1);
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await session.detach();
+  await page
+    .locator(".player-bottom")
+    .getByRole("button", { name: "Reset zoom" })
+    .click();
+  await expect.poll(async () => (await videoState(page)).scale).toBe(1);
+  expect((await videoState(page)).x).toBe(0);
+  await expect(page.getByRole("button", { name: "Reset zoom" })).toHaveCount(0);
+});
+
+test("desktop keeps click-to-pause and has no custom zoom", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, "Desktop behavior");
+  await fixture(page);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Play timelapse", exact: true })
+    .click();
+  await expect
+    .poll(async () => (await videoState(page)).time)
+    .toBeGreaterThan(0);
+  await pinch(page);
+  expect((await videoState(page)).scale).toBe(1);
+  await expect(page.getByRole("button", { name: "Reset zoom" })).toHaveCount(0);
+  await expect(page.locator(".center-play")).toHaveCount(0);
 });

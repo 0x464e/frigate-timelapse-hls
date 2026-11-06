@@ -66,8 +66,9 @@ ten seconds while visible. A one-off `publish-library` does not keep polling.
 ## Player
 
 - No autoplay. Posters and library metadata load immediately; HLS loads only after
-  **Play**, **Resume**, or a tap on the player. Play starts at the beginning, including
-  on growing days. Tap/click the video to play or pause; double-tap either side to seek.
+  **Play**, **Resume**, or a desktop click on the player. Play starts at the beginning,
+  including on growing days. Desktop clicks toggle playback; mobile taps reveal a
+  centered Play/Pause button. Double-tap either side to seek on either device.
 - **Archive** provides a calendar with month/year selection and dated links.
   Today's timeline grows as new segments become available. Reaching the end waits
   for more video until the stream is finalized. Partial past days remain playable.
@@ -82,6 +83,13 @@ ten seconds while visible. A one-off `publish-library` does not keep polling.
   the speed button, Escape, or a tap outside. The cog beside Archive opens settings.
 - Hold the video to temporarily double playback speed, capped at 4×. Releasing or
   cancelling restores the selected speed. This does not change the rendering speed.
+- On mobile, portrait controls remain visible outside the video area; the center
+  button fades while playing and remains visible while paused. In paused landscape,
+  tapping outside the controls hides or restores the entire interface.
+- Pinch to zoom on mobile, then pan with one finger. Zoom keeps the video proportions
+  and can fill the portrait video area without covering the permanent controls.
+  Double-tap seeking still works when zoomed; hold-to-boost is disabled. **Reset zoom**
+  appears in the bottom controls. Opening another day resets zoom.
 - Play positions are saved per day and generation, with an explicit Resume option.
 - Fullscreen requests landscape orientation when supported. Picture-in-picture and
   screen wake lock depend on browser capabilities; wake lock generally requires HTTPS.
