@@ -213,10 +213,23 @@ a.icon-button:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: max(28px, env(safe-area-inset-top))
-    max(40px, env(safe-area-inset-right)) 40px
-    max(40px, env(safe-area-inset-left));
+  padding: max(16px, env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right)) 16px
+    max(24px, env(safe-area-inset-left));
   background: linear-gradient(#080b0bbb, transparent);
+  pointer-events: none;
+}
+.watch-nav > * {
+  pointer-events: auto;
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings-button {
+  background: #171b1780;
+  backdrop-filter: blur(12px);
 }
 .chrome {
   transition:
@@ -320,52 +333,9 @@ a.icon-button:hover {
   position: absolute;
   z-index: 3;
   inset: auto 0 0;
-  padding: 60px max(40px, env(safe-area-inset-right))
-    max(20px, env(safe-area-inset-bottom)) max(40px, env(safe-area-inset-left));
-  background: linear-gradient(transparent, #080b0bd9 40%, #080b0bf0);
-}
-.day-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-}
-.day-heading h2 {
-  font-size: 21px;
-  font-weight: 400;
-  letter-spacing: -0.025em;
-  margin-top: 9px;
-}
-.day-navigation {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.day-navigation > .icon-button {
-  border: 1px solid #ffffff25;
-}
-.bottom-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 22px;
-  padding-top: 14px;
-  border-top: 1px solid #ffffff1d;
-  gap: 16px;
-}
-.bottom-meta > span {
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  color: #879087;
-}
-.settings-link {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 32px;
-  padding: 0 8px;
-  color: #acb7ab;
-  font-size: 11px;
+  padding: 4px max(24px, env(safe-area-inset-right))
+    max(6px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: linear-gradient(transparent, #080b0bc9 55%, #080b0be8);
 }
 .control-bar,
 .control-group {
@@ -375,7 +345,7 @@ a.icon-button:hover {
 }
 .control-bar {
   justify-content: space-between;
-  margin-top: 4px;
+  margin-top: 0;
 }
 .speed-button {
   min-height: 44px;
@@ -418,23 +388,26 @@ a.icon-button:hover {
   gap: 10px;
   font-size: 12px;
   white-space: nowrap;
+  pointer-events: none;
 }
 .boost-badge {
   top: 22%;
 }
 .notice {
-  top: 45%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 .waiting-badge {
-  top: 40%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   color: #bdcbb7;
 }
 .player-error {
   position: absolute;
   z-index: 4;
-  top: 35%;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   padding: 25px;
   text-align: center;
   background: #151b15ed;
@@ -466,7 +439,7 @@ a.icon-button:hover {
 }
 /* A large hit area, independent of the narrow visual track. */
 .timeline-wrap {
-  margin-top: 14px;
+  margin-top: 0;
 }
 .timeline {
   position: relative;
@@ -533,16 +506,58 @@ a.icon-button:hover {
   pointer-events: none;
 }
 .timeline-times {
+  position: absolute;
+  inset: auto 0 0;
   display: flex;
   justify-content: space-between;
   color: #aab6a7;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
-  margin-top: -2px;
+  line-height: 12px;
+  pointer-events: none;
 }
 .timeline[aria-disabled="true"] {
   opacity: 0.4;
   pointer-events: none;
+}
+/* Non-modal speed adjustment stays above the controls, leaving playback visible. */
+.speed-popover {
+  position: absolute;
+  z-index: 5;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(100% + 4px);
+  width: min(300px, calc(100% - 24px));
+  padding: 10px 12px 6px;
+  border: 1px solid #ffffff24;
+  border-radius: 12px;
+  background: #151b16ed;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 6px 24px #0005;
+}
+.speed-popover .speed-control {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.speed-popover .setting-heading {
+  font-size: 11px;
+}
+.speed-popover .setting-heading output {
+  font-size: 15px;
+}
+.speed-popover .speed-stepper {
+  margin-top: 0;
+  gap: 8px;
+}
+.speed-popover .speed-ticks {
+  margin-inline: 44px;
+  height: 16px;
+  font-size: 9px;
+}
+.speed-popover .reset-speed {
+  min-height: 30px;
+  font-size: 11px;
+  margin-left: -8px;
 }
 /* Settings sheet */
 .dialog-overlay {
@@ -1059,7 +1074,7 @@ a.icon-button:hover {
 }
 @media (max-width: 620px) {
   .watch-nav {
-    padding: 18px 20px 35px;
+    padding: max(10px, env(safe-area-inset-top)) 14px 12px;
   }
   .brand {
     font-size: 10px;
@@ -1074,7 +1089,8 @@ a.icon-button:hover {
     min-height: 38px;
   }
   .player-bottom {
-    padding: 50px 22px max(14px, env(safe-area-inset-bottom));
+    padding: 0 max(14px, env(safe-area-inset-right))
+      max(6px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
   }
   .intro h1 {
     font-size: 29px;
@@ -1092,34 +1108,8 @@ a.icon-button:hover {
     min-height: 60px;
     padding: 14px 23px;
   }
-  .day-heading h2 {
-    font-size: 19px;
-  }
-  .day-heading .eyebrow {
-    font-size: 8px;
-  }
-  .day-navigation {
-    gap: 6px;
-  }
-  .day-navigation .icon-button {
-    height: 37px;
-    width: 37px;
-  }
-  .bottom-meta {
-    margin-top: 12px;
-    padding-top: 8px;
-  }
-  .bottom-meta > span {
-    font-size: 7px;
-  }
-  .settings-link {
-    font-size: 10px;
-  }
   .control-bar .control-group {
     gap: 1px;
-  }
-  .optional-control {
-    display: none;
   }
   .settings-dialog {
     padding: 24px;
@@ -1236,20 +1226,13 @@ a.icon-button:hover {
     min-height: 0;
   }
   .watch-nav {
-    padding: 12px max(24px, env(safe-area-inset-right)) 20px
-      max(24px, env(safe-area-inset-left));
+    padding: max(6px, env(safe-area-inset-top))
+      max(16px, env(safe-area-inset-right)) 10px
+      max(16px, env(safe-area-inset-left));
   }
   .player-bottom {
-    padding: 30px max(28px, env(safe-area-inset-right))
-      max(8px, env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left));
-  }
-  .day-heading {
-    display: none;
-  }
-  .bottom-meta {
-    margin-top: 1px;
-    padding-top: 0;
-    border: 0;
+    padding: 0 max(16px, env(safe-area-inset-right))
+      max(4px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   }
   .timeline-wrap {
     margin-top: 0;
@@ -1282,9 +1265,6 @@ a.icon-button:hover {
   .settings-dialog {
     max-height: calc(100% - 20px);
     padding: 20px;
-  }
-  .optional-control {
-    display: inline-flex;
   }
 }
 @media (prefers-reduced-motion: reduce) {

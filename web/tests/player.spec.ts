@@ -141,19 +141,26 @@ test("poster waits for Play; real HLS plays and speed does not persist", async (
         .evaluate((video) => (video as HTMLVideoElement).currentTime),
     )
     .toBeGreaterThan(0);
-  await page.getByLabel("Player settings", { exact: true }).click();
+  await page.getByLabel("Change playback speed", { exact: true }).click();
   await page.getByLabel("Increase speed by 0.1", { exact: true }).click();
   await expect(
     page.getByRole("slider", { name: "Playback speed", exact: true }),
   ).toHaveAttribute("aria-valuenow", "1.1");
+  await page.keyboard.press("Escape");
+  await page.getByLabel("Player settings", { exact: true }).click();
   await page.getByLabel("Skip forward / back").fill("9");
   await page.getByLabel("Close settings").click();
   await page.goto("/days/2026-04-22");
   await page.getByLabel("Player settings", { exact: true }).click();
+  await expect(page.getByLabel("Skip forward / back")).toHaveValue("9");
+  await page.getByLabel("Close settings").click();
+  await page
+    .getByRole("button", { name: "Play timelapse", exact: true })
+    .click();
+  await page.getByLabel("Change playback speed", { exact: true }).click();
   await expect(
     page.getByRole("slider", { name: "Playback speed", exact: true }),
   ).toHaveAttribute("aria-valuenow", "1");
-  await expect(page.getByLabel("Skip forward / back")).toHaveValue("9");
 });
 
 test("calendar navigates months and day links remain paused", async ({
@@ -186,7 +193,9 @@ test("Today opens today after playing a historical day through SPA navigation", 
         .evaluate((v) => (v as HTMLVideoElement).currentTime),
     )
     .toBeGreaterThan(0);
-  await page.getByRole("link", { name: "Today", exact: true }).click();
+  await page
+    .getByRole("link", { name: "Timelapse today", exact: true })
+    .click();
   await expect(page.locator(".player-shell")).toHaveAttribute(
     "aria-label",
     `test timelapse for ${date}`,
@@ -242,9 +251,9 @@ test("a growing event extends without replacing its video instance", async ({
   await page
     .locator("video")
     .evaluate((video) => (video.dataset.instance = "original"));
-  await page.getByLabel("Player settings", { exact: true }).click();
+  await page.getByLabel("Change playback speed", { exact: true }).click();
   await page.getByLabel("Increase speed by 0.1", { exact: true }).click();
-  await page.getByLabel("Close settings").click();
+  await page.keyboard.press("Escape");
   await expect(
     page.getByText("Waiting for more footage", { exact: true }),
   ).toBeVisible();
@@ -588,4 +597,176 @@ test("Today advances at midnight until playback pins the open day", async ({
     "aria-label",
     `test timelapse for ${date}`,
   );
+});
+
+test("speed adjusts in a small non-modal panel while video keeps playing", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Play timelapse", exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      page
+        .locator("video")
+        .evaluate((v) => (v as HTMLVideoElement).currentTime),
+    )
+    .toBeGreaterThan(0);
+  await page.getByLabel("Change playback speed", { exact: true }).click();
+  const panel = page.getByRole("dialog", {
+    name: "Playback speed",
+    exact: true,
+  });
+  await expect(panel).toHaveAttribute("aria-modal", "false");
+  const box = (await panel.boundingBox())!;
+  expect(box.width).toBeLessThanOrEqual(300);
+  expect(box.height).toBeLessThan(150);
+  await expect(page.locator(".dialog-overlay")).toHaveCount(0);
+  await page.getByLabel("Increase speed by 0.1").click();
+  await expect
+    .poll(() =>
+      page
+        .locator("video")
+        .evaluate((v) => (v as HTMLVideoElement).playbackRate),
+    )
+    .toBe(1.1);
+  expect(
+    await page.locator("video").evaluate((v) => (v as HTMLVideoElement).paused),
+  ).toBe(false);
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(
+    page.getByLabel("Change playback speed", { exact: true }),
+  ).toBeFocused();
+  await page.getByLabel("Change playback speed", { exact: true }).click();
+  await page.getByRole("button", { name: "Start over" }).click();
+  await expect(panel).toHaveCount(0);
+});
+
+test("single taps toggle playback and double taps seek without toggling it", async ({
+  page,
+  isMobile,
+}) => {
+  await fixture(page);
+  await page.goto("/");
+  const surface = page.getByTestId("gesture-surface");
+  const rect = (await surface.boundingBox())!;
+  const center = { x: rect.width * 0.5, y: rect.height * 0.5 };
+  const side = { x: rect.width * 0.8, y: rect.height * 0.5 };
+  const tap = (point: { x: number; y: number }) =>
+    isMobile
+      ? surface.tap({ position: point })
+      : surface.click({ position: point });
+  await tap(center);
+  await expect
+    .poll(() =>
+      page
+        .locator("video")
+        .evaluate((v) => (v as HTMLVideoElement).currentTime),
+    )
+    .toBeGreaterThan(0);
+  await tap(center);
+  await expect
+    .poll(() =>
+      page.locator("video").evaluate((v) => (v as HTMLVideoElement).paused),
+    )
+    .toBe(true);
+  if (isMobile) {
+    await tap(side);
+    await tap(side);
+  } else await surface.dblclick({ position: side, delay: 70 });
+  await expect
+    .poll(() =>
+      page
+        .locator("video")
+        .evaluate((v) => (v as HTMLVideoElement).currentTime),
+    )
+    .toBeGreaterThan(4);
+  expect(
+    await page.locator("video").evaluate((v) => (v as HTMLVideoElement).paused),
+  ).toBe(true);
+  await tap(side);
+  await expect
+    .poll(() =>
+      page.locator("video").evaluate((v) => (v as HTMLVideoElement).paused),
+    )
+    .toBe(false);
+  await tap(side);
+  await expect
+    .poll(() =>
+      page.locator("video").evaluate((v) => (v as HTMLVideoElement).paused),
+    )
+    .toBe(true);
+});
+
+test("portrait PiP stays visible and landscape controls use only two compact rows", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 393, height: 851 });
+  await fixture(page);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Play timelapse", exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      page
+        .locator("video")
+        .evaluate((v) => (v as HTMLVideoElement).currentTime),
+    )
+    .toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Picture in picture" }),
+  ).toBeVisible();
+  const settings = (await page
+    .getByLabel("Player settings", { exact: true })
+    .boundingBox())!;
+  const archive = (await page
+    .getByRole("link", { name: "Archive", exact: true })
+    .boundingBox())!;
+  expect(
+    Math.abs(settings.y + settings.height / 2 - archive.y - archive.height / 2),
+  ).toBeLessThan(1);
+  expect(settings.x).toBeGreaterThan(archive.x);
+  await expect(page.getByLabel(/(?:Previous|Next) available day/)).toHaveCount(
+    0,
+  );
+  await expect(page.locator(".bottom-meta, .day-heading")).toHaveCount(0);
+  await page.setViewportSize({ width: 851, height: 393 });
+  const controls = (await page.locator(".player-bottom").boundingBox())!;
+  expect(controls.height).toBeLessThanOrEqual(100);
+  expect(
+    (await page.getByRole("slider", { name: "Seek timeline" }).boundingBox())!
+      .height,
+  ).toBeGreaterThanOrEqual(48);
+});
+
+test("loading status is centered over the player", async ({ page }) => {
+  await fixture(page);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/*.m3u8*", async (route) => {
+    await gate;
+    await route.fallback();
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Play timelapse", exact: true })
+    .click();
+  const status = page.getByText("Loading your timelapse", { exact: true });
+  try {
+    await expect(status).toBeVisible();
+    const message = (await status.boundingBox())!;
+    const player = (await page.locator(".player-shell").boundingBox())!;
+    expect(
+      Math.abs(message.y + message.height / 2 - player.y - player.height / 2),
+    ).toBeLessThan(1);
+  } finally {
+    release();
+  }
 });

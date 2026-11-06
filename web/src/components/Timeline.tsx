@@ -119,10 +119,10 @@ export function Timeline({
             {formatTime(tooltip)}
           </output>
         )}
-      </div>
-      <div className="timeline-times">
-        <span>{formatTime(value)}</span>
-        <span>{formatTime(currentDuration)} available</span>
+        <div className="timeline-times" aria-hidden="true">
+          <span>{formatTime(value)}</span>
+          <span>{formatTime(currentDuration)}</span>
+        </div>
       </div>
     </div>
   );

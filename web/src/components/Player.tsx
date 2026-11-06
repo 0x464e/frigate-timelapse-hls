@@ -5,8 +5,6 @@ import {
   ArrowLeft,
   CalendarDays,
   Camera,
-  ChevronLeft,
-  ChevronRight,
   CircleHelp,
   FastForward,
   Film,
@@ -15,7 +13,7 @@ import {
   Pause,
   PictureInPicture2,
   Play,
-  Settings2,
+  Settings,
   SkipBack,
   X,
 } from "lucide-react";
@@ -39,7 +37,7 @@ import {
   todayIn,
 } from "../lib";
 import type { Day, Library } from "../types";
-import { SpeedControl } from "./SpeedControl";
+import { SpeedPopover } from "./SpeedPopover";
 import { Timeline } from "./Timeline";
 
 interface Props {
@@ -75,6 +73,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
   const [seekStep, setSeekStep] = useState(getSeekInterval);
   const [seekDraft, setSeekDraft] = useState(() => String(seekStep));
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [speedOpen, setSpeedOpen] = useState(false);
   const [controls, setControls] = useState(true);
   const [scrubbing, setScrubbing] = useState(false);
   const [full, setFull] = useState(false);
@@ -90,6 +89,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
   const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const gesture = useRef<{
     x: number;
     y: number;
@@ -104,11 +104,6 @@ export function Player({ library, day, date, now, onStart }: Props) {
   const saved = day ? Number(getStored(resumeKey(library.camera, day))) : 0;
   const hasResume =
     Number.isFinite(saved) && saved > 1 && saved < (day?.duration ?? 0) - 0.5;
-  const available = library.days
-    .filter((item) => item.ready)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const previous = available.filter((item) => item.date < date).at(-1);
-  const next = available.find((item) => item.date > date);
   const sourceBase = day
     ? isGrowing
       ? day.live_playlist_url
@@ -139,6 +134,13 @@ export function Player({ library, day, date, now, onStart }: Props) {
     clearTimeout(idleTimer.current);
     idleTimer.current = setTimeout(() => setControls(false), 2800);
   }, []);
+  const showSpeed = useCallback(
+    (open: boolean) => {
+      setSpeedOpen(open);
+      showControls();
+    },
+    [showControls],
+  );
   const start = (at = 0) => {
     initialPosition.current = at;
     position.current = at;
@@ -279,6 +281,8 @@ export function Player({ library, day, date, now, onStart }: Props) {
   useEffect(() => {
     const lost = () => {
       cancelBoost();
+      clearTimeout(tapTimer.current);
+      lastTap.current = null;
       gesture.current = null;
     };
     window.addEventListener("blur", lost);
@@ -349,6 +353,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
       clearTimeout(idleTimer.current);
       clearTimeout(noticeTimer.current);
       clearTimeout(holdTimer.current);
+      clearTimeout(tapTimer.current);
     },
     [],
   );
@@ -401,7 +406,9 @@ export function Player({ library, day, date, now, onStart }: Props) {
     }
   };
   const pointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!started || settingsOpen || event.button !== 0) return;
+    if (!day?.ready || settingsOpen || event.button !== 0) return;
+    clearTimeout(tapTimer.current);
+    showControls();
     gesture.current = {
       x: event.clientX,
       y: event.clientY,
@@ -413,7 +420,8 @@ export function Player({ library, day, date, now, onStart }: Props) {
     holdTimer.current = setTimeout(() => {
       if (!gesture.current || gesture.current.moved) return;
       gesture.current.held = true;
-      if (desiredPlayback.current && speed < 40) setBoosting(true);
+      lastTap.current = null;
+      if (started && desiredPlayback.current && speed < 40) setBoosting(true);
     }, 450);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -422,6 +430,10 @@ export function Player({ library, day, date, now, onStart }: Props) {
     gesture.current = null;
     cancelBoost();
     if (!current || current.held || current.moved) return;
+    if (!started) {
+      start();
+      return;
+    }
     const rect = event.currentTarget.getBoundingClientRect();
     const side =
       event.clientX - rect.left < rect.width * 0.4
@@ -442,13 +454,23 @@ export function Player({ library, day, date, now, onStart }: Props) {
       lastTap.current = null;
     } else {
       lastTap.current = { at, side };
-      showControls();
+      // Give a side tap time to become a double-tap seek without pausing first.
+      if (side === "center") {
+        lastTap.current = null;
+        toggle();
+      } else {
+        tapTimer.current = setTimeout(() => {
+          lastTap.current = null;
+          toggle();
+        }, 320);
+      }
     }
   };
   const visibleControls =
     controls ||
     paused ||
     settingsOpen ||
+    speedOpen ||
     scrubbing ||
     !started ||
     Boolean(error);
@@ -459,6 +481,16 @@ export function Player({ library, day, date, now, onStart }: Props) {
         className={`player-shell ${visibleControls ? "" : "controls-hidden"}`}
         tabIndex={0}
         aria-label={`${library.camera} timelapse for ${date}`}
+        onPointerDownCapture={(event) => {
+          if (
+            (event.target as HTMLElement).closest(
+              "button, a, input, [role='slider'], [role='dialog']",
+            )
+          ) {
+            clearTimeout(tapTimer.current);
+            lastTap.current = null;
+          }
+        }}
         onPointerMove={(event) => {
           if (event.pointerType === "mouse") showControls();
         }}
@@ -573,6 +605,16 @@ export function Player({ library, day, date, now, onStart }: Props) {
               <CalendarDays size={17} />
               <span>Archive</span>
             </Link>
+            <button
+              className="icon-button settings-button"
+              aria-label="Player settings"
+              onClick={() => {
+                setSpeedOpen(false);
+                setSettingsOpen(true);
+              }}
+            >
+              <Settings size={20} />
+            </button>
           </div>
         </header>
         {!started && (
@@ -653,155 +695,83 @@ export function Player({ library, day, date, now, onStart }: Props) {
             </button>
           </div>
         )}
-        <div className="player-bottom chrome">
-          <div className="day-heading">
-            <div>
-              <span className="eyebrow">
-                {started
-                  ? library.camera.replaceAll("_", " ")
-                  : "A DIFFERENT PACE"}
-              </span>
-              <h2>{started ? prettyDate(date) : "Watch the day unfold."}</h2>
-            </div>
-            <div className="day-navigation">
-              {previous ? (
-                <Link
-                  aria-label="Previous available day"
+        {started && (
+          <div className="player-bottom chrome">
+            <Timeline
+              time={time}
+              duration={duration}
+              buffered={buffered}
+              step={seekStep}
+              onSeek={seek}
+              onScrubbing={setScrubbing}
+            />
+            <div className="control-bar">
+              <div className="control-group">
+                <PlayButton
                   className="icon-button"
-                  to={`/days/${previous.date}`}
+                  aria-label={paused ? "Play" : "Pause"}
+                  onClick={() => {
+                    desiredPlayback.current = paused;
+                    showControls();
+                  }}
                 >
-                  <ChevronLeft />
-                </Link>
-              ) : (
+                  {paused ? (
+                    <Play fill="currentColor" />
+                  ) : (
+                    <Pause fill="currentColor" />
+                  )}
+                </PlayButton>
                 <button
                   className="icon-button"
-                  aria-label="Previous available day"
-                  disabled
+                  aria-label="Start over"
+                  onClick={() => seek(0)}
                 >
-                  <ChevronLeft />
+                  <SkipBack size={19} />
                 </button>
-              )}
-              {!activeToday && (
-                <Link className="text-button" to="/">
-                  Today
-                </Link>
-              )}
-              {next ? (
-                <Link
-                  aria-label="Next available day"
-                  className="icon-button"
-                  to={`/days/${next.date}`}
-                >
-                  <ChevronRight />
-                </Link>
-              ) : (
                 <button
-                  className="icon-button"
-                  aria-label="Next available day"
-                  disabled
+                  className="latest-button"
+                  aria-label="Jump to latest available footage"
+                  onClick={() => seek(Math.max(0, duration - 0.1))}
                 >
-                  <ChevronRight />
+                  {isGrowing && <span className="pulse-dot" />} Latest
                 </button>
-              )}
-            </div>
-          </div>
-          {started && (
-            <>
-              <Timeline
-                time={time}
-                duration={duration}
-                buffered={buffered}
-                step={seekStep}
-                onSeek={seek}
-                onScrubbing={setScrubbing}
-              />
-              <div className="control-bar">
-                <div className="control-group">
-                  <PlayButton
+              </div>
+              <div className="control-group">
+                <SpeedPopover
+                  speed={speed}
+                  onChange={setSpeed}
+                  open={speedOpen}
+                  onOpenChange={showSpeed}
+                />
+                {pip && (
+                  <button
                     className="icon-button"
-                    aria-label={paused ? "Play" : "Pause"}
+                    aria-label="Picture in picture"
                     onClick={() => {
-                      desiredPlayback.current = paused;
-                      showControls();
+                      if (document.pictureInPictureElement)
+                        void document.exitPictureInPicture().catch(() => {});
+                      else
+                        void video.current
+                          ?.requestPictureInPicture()
+                          .catch(() =>
+                            announce("Picture-in-picture is unavailable"),
+                          );
                     }}
                   >
-                    {paused ? (
-                      <Play fill="currentColor" />
-                    ) : (
-                      <Pause fill="currentColor" />
-                    )}
-                  </PlayButton>
-                  <button
-                    className="icon-button"
-                    aria-label="Start over"
-                    onClick={() => seek(0)}
-                  >
-                    <SkipBack size={19} />
+                    <PictureInPicture2 size={20} />
                   </button>
-                  <button
-                    className="latest-button"
-                    aria-label="Jump to latest available footage"
-                    onClick={() => seek(Math.max(0, duration - 0.1))}
-                  >
-                    {isGrowing && <span className="pulse-dot" />} Latest
-                  </button>
-                </div>
-                <div className="control-group">
-                  <button
-                    className="speed-button"
-                    onClick={() => setSettingsOpen(true)}
-                    aria-label="Change playback speed"
-                  >
-                    {(speed / 10).toFixed(1)}×
-                  </button>
-                  {pip && (
-                    <button
-                      className="icon-button optional-control"
-                      aria-label="Picture in picture"
-                      onClick={() => {
-                        if (document.pictureInPictureElement)
-                          void document.exitPictureInPicture().catch(() => {});
-                        else
-                          void video.current
-                            ?.requestPictureInPicture()
-                            .catch(() =>
-                              announce("Picture-in-picture is unavailable"),
-                            );
-                      }}
-                    >
-                      <PictureInPicture2 size={20} />
-                    </button>
-                  )}
-                  <button
-                    className="icon-button"
-                    aria-label={full ? "Exit fullscreen" : "Enter fullscreen"}
-                    onClick={() => void fullscreen()}
-                  >
-                    {full ? <Minimize /> : <Maximize />}
-                  </button>
-                </div>
+                )}
+                <button
+                  className="icon-button"
+                  aria-label={full ? "Exit fullscreen" : "Enter fullscreen"}
+                  onClick={() => void fullscreen()}
+                >
+                  {full ? <Minimize /> : <Maximize />}
+                </button>
               </div>
-            </>
-          )}
-          <div className="bottom-meta">
-            <span>
-              {day?.complete
-                ? "DAY COMPLETE"
-                : day?.ready
-                  ? activeToday
-                    ? "GROWING THROUGHOUT THE DAY"
-                    : "PARTIAL DAY"
-                  : `${library.schedule.start.slice(0, 5)} — ${library.schedule.end.slice(0, 5)}`}
-            </span>
-            <button
-              className="settings-link"
-              onClick={() => setSettingsOpen(true)}
-              aria-label="Player settings"
-            >
-              <Settings2 size={15} /> Settings
-            </button>
+            </div>
           </div>
-        </div>
+        )}
         <Dialog.Root open={settingsOpen} onOpenChange={setSettingsOpen}>
           <Dialog.Portal container={shell.current}>
             <Dialog.Overlay className="dialog-overlay" />
@@ -824,7 +794,6 @@ export function Player({ library, day, date, now, onStart }: Props) {
               <Dialog.Description className="muted">
                 Fine-tune how you watch. The recording itself stays the same.
               </Dialog.Description>
-              <SpeedControl speed={speed} onChange={setSpeed} />
               <div className="seek-setting">
                 <label htmlFor="seek-step">Skip forward / back</label>
                 <div>
@@ -859,8 +828,8 @@ export function Player({ library, day, date, now, onStart }: Props) {
               <div className="gesture-help">
                 <CircleHelp size={17} />
                 <p>
-                  Double-tap either side to skip. Hold the video to speed up.
-                  Use ← / → on a keyboard.
+                  Tap to play or pause. Double-tap either side to skip. Hold the
+                  video to speed up. Use ← / → on a keyboard.
                 </p>
               </div>
             </Dialog.Content>
