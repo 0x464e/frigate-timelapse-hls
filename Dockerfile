@@ -1,5 +1,5 @@
 FROM debian:trixie-slim
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /bin/
 
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
@@ -23,8 +23,8 @@ RUN apt-get update \
         ffmpeg \
         nginx \
     && rm -rf /var/lib/apt/lists/* \
-    && uv python install 3.14 \
-    && uv sync --no-dev --no-cache \
+    && uv python install 3.15 \
+    && uv sync --locked --python 3.15 --no-dev --no-cache \
     && mkdir -p /recordings /data /output \
     && rm -f /etc/nginx/sites-enabled/default
 
