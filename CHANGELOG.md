@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.1](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.3.0...v0.3.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* preserve completed day status on shutdown ([9775420](https://github.com/0x464e/frigate-timelapse-hls/commit/9775420b1efa8e0e8276e4025b7204b20c8d15f6))
+* show previous timelapse before today's session starts ([590b90c](https://github.com/0x464e/frigate-timelapse-hls/commit/590b90ce43050251e2fe85125855a8bdd2c6eaff))
+
+
+### Performance Improvements
+
+* prune completed clip history at daily schedule start ([ac1370c](https://github.com/0x464e/frigate-timelapse-hls/commit/ac1370c83a0a199bdcc994e8b9e12d71c67e5ad4))
+
 ## [0.3.0](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.2.2...v0.3.0) (2026-11-06)
 
 
