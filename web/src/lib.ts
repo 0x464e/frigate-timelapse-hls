@@ -24,6 +24,20 @@ export const todayIn = (timezone: string, now = new Date()) =>
     month: "2-digit",
     day: "2-digit",
   }).format(now);
+export function defaultWatchDate(library: Library, now = new Date()) {
+  const today = todayIn(library.timezone, now);
+  const current = library.days.find((day) => day.date === today);
+  // A session can start before it has any playable HLS. Do not hide its waiting
+  // or failure state just because the first segment has not arrived yet.
+  if (current && (current.ready || current.status !== "unknown")) return today;
+  return (
+    library.days
+      .filter((day) => day.ready && day.date < today)
+      .map((day) => day.date)
+      .sort()
+      .at(-1) ?? today
+  );
+}
 export const prettyDate = (date: string, long = false) =>
   new Intl.DateTimeFormat("en-GB", {
     weekday: long ? "long" : "short",

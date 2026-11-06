@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   clamp,
+  defaultWatchDate,
   formatTime,
   getSeekInterval,
   parseLibrary,
@@ -11,7 +12,7 @@ import {
   todayIn,
   validDate,
 } from "./lib";
-import type { Day } from "./types";
+import type { Day, Library } from "./types";
 
 describe("playback controls", () => {
   beforeEach(() => localStorage.clear());
@@ -53,4 +54,92 @@ describe("playback controls", () => {
   it("rejects unsupported metadata without falling through to media requests", () => {
     expect(() => parseLibrary({ version: 2, days: [] })).toThrow();
   });
+});
+
+describe("default watch day", () => {
+  const day = (date: string, overrides: Partial<Day> = {}): Day => ({
+    date,
+    generation_id: date,
+    poster_url: null,
+    playlist_url: `/published/cam/${date}/index.m3u8`,
+    live_playlist_url: `/published/cam/${date}/live.m3u8`,
+    duration: 12,
+    ready: true,
+    status: "completed",
+    mode: "completed",
+    complete: true,
+    stream_ended: true,
+    published_at: null,
+    schedule_start: null,
+    schedule_end: null,
+    render_speed: 288,
+    ...overrides,
+  });
+  const library = (days: Day[]): Library => ({
+    version: 1,
+    camera: "cam",
+    timezone: "Europe/Helsinki",
+    schedule: { start: "08:00:00", end: "20:00:00" },
+    thumbnail_offset_seconds: 0,
+    published_at: "2026-11-06T20:00:00+02:00",
+    days,
+  });
+  const midnight = new Date("2026-11-06T22:01:00Z");
+
+  it("keeps yesterday after local midnight and ignores future or unready days", () => {
+    const value = library([
+      day("2026-11-05"),
+      day("2026-11-07", { ready: false, status: "unknown" }),
+      day("2026-11-08"),
+      day("2026-11-06"),
+    ]);
+    expect(defaultWatchDate(value, midnight)).toBe("2026-11-06");
+    // The clock reaching schedule start alone does not mean the generator started.
+    expect(defaultWatchDate(value, new Date("2026-11-07T06:01:00Z"))).toBe(
+      "2026-11-06",
+    );
+  });
+
+  it.each(["starting", "running", "stopped", "failed", "completed"])(
+    "shows today's %s session before the first segment is ready",
+    (status) => {
+      const value = library([
+        day("2026-11-07", { ready: false, status }),
+        day("2026-11-06"),
+      ]);
+      expect(defaultWatchDate(value, midnight)).toBe("2026-11-07");
+    },
+  );
+
+  it("opens today's playable archive even without session status", () => {
+    expect(
+      defaultWatchDate(
+        library([day("2026-11-07", { status: "unknown" }), day("2026-11-06")]),
+        midnight,
+      ),
+    ).toBe("2026-11-07");
+  });
+
+  it("uses the latest playable past day when yesterday is missing", () => {
+    expect(
+      defaultWatchDate(
+        library([day("2026-11-06", { ready: false }), day("2026-11-04")]),
+        midnight,
+      ),
+    ).toBe("2026-11-04");
+  });
+
+  it("keeps today's waiting view when no previous playable day exists", () => {
+    expect(defaultWatchDate(library([]), midnight)).toBe("2026-11-07");
+  });
+
+  it.each([
+    ["2026-03-28T22:01:00Z", "2026-03-28"],
+    ["2026-12-31T22:01:00Z", "2026-12-31"],
+  ])(
+    "uses calendar dates across timezone and year boundaries at %s",
+    (time, date) => {
+      expect(defaultWatchDate(library([day(date)]), new Date(time))).toBe(date);
+    },
+  );
 });

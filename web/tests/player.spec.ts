@@ -150,6 +150,13 @@ async function fixture(page: Page, growing = false, poster = false) {
   });
   return {
     media,
+    startDay: (value: string, ready = true) => {
+      library.days.unshift({
+        ...makeDay(value),
+        ready,
+        duration: ready ? segments : 0,
+      });
+    },
     interruptSegments: () => {
       failedSegments = 2;
     },
@@ -622,11 +629,40 @@ test("unsupported fullscreen, PiP and wake lock keep playback functional", async
   ).toBe(false);
 });
 
-test("Today advances at midnight until playback pins the open day", async ({
+test("landing opens the prior day before today's session starts; explicit dates stay explicit", async ({
   page,
 }) => {
+  const next = new Date(`${date}T12:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  const nextDate = next.toISOString().slice(0, 10);
+  await page.clock.install({ time: new Date(`${nextDate}T00:15:00+02:00`) });
+  const { media } = await fixture(page);
+  await page.goto("/");
+  await expect(page.locator(".player-shell")).toHaveAttribute(
+    "aria-label",
+    `test timelapse for ${date}`,
+  );
+  await expect(
+    page.getByRole("button", { name: "Play timelapse", exact: true }),
+  ).toBeVisible();
+  expect(media).toHaveLength(0);
+  await page.goto(`/days/${nextDate}`);
+  await expect(page.locator(".player-shell")).toHaveAttribute(
+    "aria-label",
+    `test timelapse for ${nextDate}`,
+  );
+  await expect(page.getByText("The day begins at 08:00")).toBeVisible();
+  expect(media).toHaveLength(0);
+});
+
+test("default day follows new sessions until playback pins the open day", async ({
+  page,
+}) => {
+  const next = new Date(`${date}T12:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  const nextDate = next.toISOString().slice(0, 10);
   await page.clock.install({ time: new Date(`${date}T21:59:50Z`) });
-  await fixture(page);
+  const { media, startDay } = await fixture(page);
   await page.goto("/");
   await expect(
     page.getByRole("button", { name: "Play timelapse", exact: true }),
@@ -634,7 +670,22 @@ test("Today advances at midnight until playback pins the open day", async ({
   await page.clock.fastForward(20000);
   await expect(
     page.getByRole("button", { name: "Play timelapse", exact: true }),
-  ).toHaveCount(0);
+  ).toBeVisible();
+  await expect(page.locator(".player-shell")).toHaveAttribute(
+    "aria-label",
+    `test timelapse for ${date}`,
+  );
+  startDay(nextDate, false);
+  await page.clock.setSystemTime(new Date(`${nextDate}T08:00:00+02:00`));
+  await page.clock.fastForward(10000);
+  await expect(page.locator(".player-shell")).toHaveAttribute(
+    "aria-label",
+    `test timelapse for ${nextDate}`,
+  );
+  await expect(
+    page.getByText("Waiting for the first encoded segment"),
+  ).toBeVisible();
+  expect(media).toHaveLength(0);
   await page.clock.setSystemTime(new Date(`${date}T21:59:50Z`));
   await page.reload();
   await page
@@ -649,6 +700,12 @@ test("Today advances at midnight until playback pins the open day", async ({
     .toBeGreaterThan(0);
   await page.clock.fastForward(20000);
   await expect(page.locator("video")).toHaveCount(1);
+  await expect(page.locator(".player-shell")).toHaveAttribute(
+    "aria-label",
+    `test timelapse for ${date}`,
+  );
+  await page.clock.setSystemTime(new Date(`${nextDate}T08:00:00+02:00`));
+  await page.clock.fastForward(10000);
   await expect(page.locator(".player-shell")).toHaveAttribute(
     "aria-label",
     `test timelapse for ${date}`,

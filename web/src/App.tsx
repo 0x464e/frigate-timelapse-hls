@@ -18,7 +18,14 @@ import {
   ChevronRight,
   RefreshCw,
 } from "lucide-react";
-import { emptyState, formatTime, prettyDate, todayIn, validDate } from "./lib";
+import {
+  defaultWatchDate,
+  emptyState,
+  formatTime,
+  prettyDate,
+  todayIn,
+  validDate,
+} from "./lib";
 import { useLibrary } from "./useLibrary";
 import type { Library } from "./types";
 import { Player } from "./components/Player";
@@ -26,12 +33,11 @@ import { Player } from "./components/Player";
 function Watch({ library, now }: { library: Library; now: Date }) {
   const { date: parameter } = useParams();
   const location = useLocation();
-  const today = todayIn(library.timezone, now);
   const [pin, setPin] = useState<{ date: string; navigation: string } | null>(
     null,
   );
   const pinnedDate = pin?.navigation === location.key ? pin.date : null;
-  const date = parameter ?? pinnedDate ?? today;
+  const date = parameter ?? pinnedDate ?? defaultWatchDate(library, now);
   if (!validDate(date))
     return (
       <div className="message-page">
