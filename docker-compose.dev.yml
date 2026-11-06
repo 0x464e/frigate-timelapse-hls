@@ -1,0 +1,26 @@
+name: frigate-timelapse-hls-web-dev
+
+services:
+  nginx:
+    image: nginx:stable-alpine
+    ports:
+      - "6773:6773"
+    volumes:
+      - type: bind
+        source: ./nginx/nginx.conf
+        target: /etc/nginx/conf.d/default.conf
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./web/dist
+        target: /usr/share/nginx/site
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./output
+        target: /output
+        read_only: true
+        bind:
+          create_host_path: false

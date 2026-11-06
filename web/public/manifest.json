@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "Timelapse",
+  "short_name": "Timelapse",
+  "description": "Watch camera timelapses and explore the archive.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111312",
+  "theme_color": "#111312",
+  "icons": [
+    {
+      "src": "/timelapse-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

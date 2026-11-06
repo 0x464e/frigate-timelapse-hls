@@ -8,6 +8,7 @@ from threading import Event
 from .config import Settings, load_settings
 from .hls import LiveHLSPublisher
 from .ingest import ContinuousClipIngestor
+from .library import LibraryPublisher
 from .logging_utils import configure_logging
 from .pipeline import PipelineServices, TimelapsePipeline
 from .scanner import FrigateVodScanner
@@ -24,10 +25,11 @@ def build_parser() -> ArgumentParser:
     subparsers.add_parser("show-config", help="Print resolved configuration")
     subparsers.add_parser("scan", help="Query Frigate metadata and show current ingest state")
     subparsers.add_parser("run-loop", help="Continuously ingest clips into one FFmpeg HLS session")
+    subparsers.add_parser("publish-library", help="Rebuild web metadata without encoding video")
     return parser
 
 
-def load_pipeline(settings: Settings) -> TimelapsePipeline:
+def load_pipeline(settings: Settings, library: LibraryPublisher | None = None) -> TimelapsePipeline:
     settings.paths.output_root.mkdir(parents=True, exist_ok=True)
     store = StateStore(settings.paths.state_db)
     scanner = FrigateVodScanner(
@@ -45,6 +47,7 @@ def load_pipeline(settings: Settings) -> TimelapsePipeline:
             ContinuousFFmpegCommandBuilder(settings.ffmpeg, settings.timelapse)
         ),
         hls_publisher=LiveHLSPublisher(),
+        library=library,
     )
     return TimelapsePipeline(services)
 
@@ -58,13 +61,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     settings = load_settings()
     configure_logging(settings.app.log_level)
-    pipeline = load_pipeline(settings)
 
     if args.command == "show-config":
         import json
 
         print(json.dumps(_settings_as_dict(settings), indent=2))
         return 0
+    library = LibraryPublisher(settings, StateStore(settings.paths.state_db))
+    if args.command == "publish-library":
+        library.publish()
+        return 0
+    pipeline = load_pipeline(settings, library)
     if args.command == "scan":
         result = pipeline.run_scan()
         logger.info(
@@ -86,13 +93,17 @@ def main(argv: list[str] | None = None) -> int:
 
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
+        library.start()
         try:
             while not stop_requested.is_set():
                 _, sleep_seconds = pipeline.run_loop_iteration()
                 if sleep_seconds > 0:
                     stop_requested.wait(sleep_seconds)
         finally:
-            pipeline.stop()
+            try:
+                pipeline.stop()
+            finally:
+                library.close()
         return 0
     parser.error(f"Unsupported command: {args.command}")
 

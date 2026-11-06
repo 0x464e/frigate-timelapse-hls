@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img" aria-label="Double play icon: glowing green and orange triangles on a rounded navy square">
+  <defs>
+    <!-- All visible artwork is native vector geometry: paths, gradients and filters. -->
+    <clipPath id="iconClip"><rect x="0" y="0" width="1254" height="1254" rx="265"/></clipPath>
+
+    <radialGradient id="navyBase" gradientUnits="userSpaceOnUse" cx="740" cy="130" r="1070" gradientTransform="matrix(1 0 0 1 0 0)">
+      <stop offset="0" stop-color="#0b1a45"/>
+      <stop offset="0.42" stop-color="#0b1b42"/>
+      <stop offset="0.77" stop-color="#071a40"/>
+      <stop offset="1" stop-color="#071638"/>
+    </radialGradient>
+    <radialGradient id="topWash" gradientUnits="userSpaceOnUse" cx="615" cy="-40" r="780" gradientTransform="translate(0 -20) scale(1 0.8)">
+      <stop offset="0" stop-color="#354b85" stop-opacity="0.22"/>
+      <stop offset="0.44" stop-color="#23376d" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#101f49" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bottomBlue" gradientUnits="userSpaceOnUse" cx="842" cy="1040" r="740" gradientTransform="translate(0 250) scale(1 0.79)">
+      <stop offset="0" stop-color="#0a5791" stop-opacity="0.53"/>
+      <stop offset="0.50" stop-color="#07366f" stop-opacity="0.33"/>
+      <stop offset="1" stop-color="#07366f" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="tealAtmos" gradientUnits="userSpaceOnUse" cx="313" cy="627" r="440" gradientTransform="translate(0 120) scale(1 0.80)">
+      <stop offset="0" stop-color="#00766b" stop-opacity="0.32"/>
+      <stop offset="0.7" stop-color="#03687d" stop-opacity="0.11"/>
+      <stop offset="1" stop-color="#03687d" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="warmAtmos" gradientUnits="userSpaceOnUse" cx="838" cy="582" r="457" gradientTransform="translate(0 70) scale(1 0.87)">
+      <stop offset="0" stop-color="#773345" stop-opacity="0.27"/>
+      <stop offset="0.60" stop-color="#7d294a" stop-opacity="0.11"/>
+      <stop offset="1" stop-color="#7d294a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="0.82" y2="1" objectBoundingBox="true">
+      <stop offset="0" stop-color="#7188d7" stop-opacity="0.29"/>
+      <stop offset="0.30" stop-color="#3f65ad" stop-opacity="0.12"/>
+      <stop offset="0.55" stop-color="#101b3e" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#3b6bcd" stop-opacity="0.22"/>
+    </linearGradient>
+
+    <!-- Gradients are oriented separately for the two arrow glyphs. -->
+    <linearGradient id="mintCyan" gradientUnits="userSpaceOnUse" x1="215" y1="937" x2="558" y2="403">
+      <stop offset="0" stop-color="#00b6ed"/>
+      <stop offset="0.19" stop-color="#00c6de"/>
+      <stop offset="0.48" stop-color="#19efbd"/>
+      <stop offset="0.73" stop-color="#72f9a2"/>
+      <stop offset="1" stop-color="#d7ffa0"/>
+    </linearGradient>
+    <linearGradient id="mintSideShade" gradientUnits="userSpaceOnUse" x1="198" y1="625" x2="615" y2="625">
+      <stop offset="0" stop-color="#00b9e5" stop-opacity="0.20"/>
+      <stop offset="0.49" stop-color="#00e6c7" stop-opacity="0"/>
+      <stop offset="1" stop-color="#c4ff9d" stop-opacity="0.50"/>
+    </linearGradient>
+    <linearGradient id="sunset" gradientUnits="userSpaceOnUse" x1="633" y1="345" x2="923" y2="945">
+      <stop offset="0" stop-color="#fff54f"/>
+      <stop offset="0.17" stop-color="#ffda24"/>
+      <stop offset="0.37" stop-color="#ffa71b"/>
+      <stop offset="0.62" stop-color="#ff6b31"/>
+      <stop offset="0.84" stop-color="#ff4b55"/>
+      <stop offset="1" stop-color="#fd3f72"/>
+    </linearGradient>
+    <linearGradient id="sunsetSideShade" gradientUnits="userSpaceOnUse" x1="625" y1="680" x2="1070" y2="680">
+      <stop offset="0" stop-color="#ffb600" stop-opacity="0.13"/>
+      <stop offset="0.45" stop-color="#ff8536" stop-opacity="0.02"/>
+      <stop offset="1" stop-color="#ff386e" stop-opacity="0.43"/>
+    </linearGradient>
+    <linearGradient id="leftRim" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#e5ffe7" stop-opacity="0.64"/>
+      <stop offset="0.30" stop-color="#c0ffdb" stop-opacity="0.50"/>
+      <stop offset="0.60" stop-color="#baffdc" stop-opacity="0.03"/>
+      <stop offset="1" stop-color="#09f3f1" stop-opacity="0.28"/>
+    </linearGradient>
+    <linearGradient id="rightRim" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#fffcd8" stop-opacity="0.68"/>
+      <stop offset="0.32" stop-color="#fff5ac" stop-opacity="0.48"/>
+      <stop offset="0.70" stop-color="#ffbea8" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#ff7696" stop-opacity="0.25"/>
+    </linearGradient>
+    <filter id="wideGlow" x="-35%" y="-35%" width="170%" height="170%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="26"/></filter>
+    <filter id="softGlow" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="8"/></filter>
+    <filter id="softShadow" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="13"/></filter>
+    <linearGradient id="shadow" gradientUnits="userSpaceOnUse" x1="0" y1="400" x2="0" y2="950">
+      <stop offset="0" stop-color="#060c1f" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#020816" stop-opacity="0.80"/>
+    </linearGradient>
+    <path id="leftArrow" d="M 244,379 C 258,378 271,385 287,396 L 584,600 C 600,612 611,630 611,650 C 611,673 601,689 581,704 L 280,923 C 260,939 241,942 225,935 C 208,928 202,910 202,887 L 202,432 C 202,401 218,381 244,379 Z"/>
+    <path id="rightArrow" d="M 661,379 C 674,377 685,384 703,397 L 1023,613 C 1042,626 1053,645 1053,663 C 1053,685 1043,699 1025,712 L 710,927 C 686,943 666,946 650,939 C 629,930 621,913 621,888 L 621,433 C 621,404 632,382 661,379 Z"/>
+  </defs>
+
+  <g clip-path="url(#iconClip)">
+    <rect width="1254" height="1254" fill="url(#navyBase)"/>
+    <rect width="1254" height="1254" fill="url(#topWash)"/>
+    <rect width="1254" height="1254" fill="url(#bottomBlue)"/>
+    <rect width="1254" height="1254" fill="url(#tealAtmos)"/>
+    <rect width="1254" height="1254" fill="url(#warmAtmos)"/>
+
+    <!-- Depth and diffuse colored emission surrounding each arrow. -->
+    <use href="#leftArrow" fill="#00e5b5" opacity="0.17" filter="url(#wideGlow)"/>
+    <use href="#rightArrow" fill="#ff7a56" opacity="0.17" filter="url(#wideGlow)"/>
+    <use href="#leftArrow" fill="#02dbce" opacity="0.19" filter="url(#softGlow)"/>
+    <use href="#rightArrow" fill="#ffae55" opacity="0.20" filter="url(#softGlow)"/>
+
+    <use href="#leftArrow" fill="url(#shadow)" transform="translate(0 11)" opacity="0.4" filter="url(#softShadow)"/>
+    <use href="#rightArrow" fill="url(#shadow)" transform="translate(0 11)" opacity="0.4" filter="url(#softShadow)"/>
+
+    <use href="#leftArrow" fill="url(#mintCyan)"/>
+    <use href="#leftArrow" fill="url(#mintSideShade)"/>
+    <use href="#rightArrow" fill="url(#sunset)"/>
+    <use href="#rightArrow" fill="url(#sunsetSideShade)"/>
+
+    <!-- Restrained top-left bevel highlights. -->
+    <path d="M 207,430 Q 209,385 245,383 Q 259,383 283,400 L 571,598" fill="none" stroke="#d9ffe8" stroke-opacity="0.23" stroke-width="6" stroke-linecap="round" filter="url(#softGlow)"/>
+    <path d="M 207,430 Q 209,385 245,383 Q 260,383 282,400 L 571,598" fill="none" stroke="url(#leftRim)" stroke-width="5" stroke-linecap="round"/>
+    <path d="M 626,431 Q 626,384 662,383 Q 678,383 701,400 L 1010,610" fill="none" stroke="#fff9c7" stroke-opacity="0.20" stroke-width="6" stroke-linecap="round" filter="url(#softGlow)"/>
+    <path d="M 626,431 Q 626,384 662,382 Q 678,384 700,400 L 1012,610" fill="none" stroke="url(#rightRim)" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- Thin, soft rim around the square. -->
+    <rect x="1" y="1" width="1252" height="1252" rx="264" fill="none" stroke="url(#edge)" stroke-width="2"/>
+  </g>
+</svg>

@@ -1,6 +1,7 @@
 .venv/
 .uv-cache/
 .idea/
+/AGENTS.md
 __pycache__/
 *.pyc
 *.egg-info/
@@ -11,3 +12,16 @@ __pycache__/
 /test_recordings/
 /tests/_generated/
 docker-compose.nginx-dev.yml
+
+# Frontend dependencies and generated verification/build output
+web/node_modules/
+web/dist/
+web/playwright-report/
+web/test-results/
+web/tests/_generated/
+web/*.tsbuildinfo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
