@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -38,6 +39,7 @@ class TimelapsePipeline:
     def __init__(self, services: PipelineServices) -> None:
         self._services = services
         self._active_day: date | None = None
+        self._last_cleanup_day: date | None = None
 
     def stop(self) -> None:
         if self._active_day is None:
@@ -114,6 +116,19 @@ class TimelapsePipeline:
 
     def run_loop_iteration(self, now: datetime | None = None) -> tuple[LoopResult, float]:
         observed_at = now or datetime.now(tz=self._services.settings.tzinfo)
+        settings = self._services.settings
+        if (
+            observed_at >= settings.window_start_for_day(observed_at.date())
+            and self._last_cleanup_day != observed_at.date()
+        ):
+            self._last_cleanup_day = observed_at.date()
+            try:
+                removed = self._services.store.prune_completed_clip_history(
+                    camera=settings.camera.name, before_day=observed_at.date()
+                )
+                logger.info("Removed %s clip records from completed past days", removed)
+            except sqlite3.Error:
+                logger.exception("Daily database cleanup failed; ingestion continues")
         existing_state = self._services.store.get_day_session(
             camera=self._services.settings.camera.name,
             day=observed_at.date(),

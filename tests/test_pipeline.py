@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, call, patch
 
 import pytest
 
@@ -96,3 +97,55 @@ def test_shutdown_preserves_completion_and_publishes_snapshot(
     entry = LibraryPublisher(settings, store).publish(start + timedelta(days=1))["days"][0]
     assert entry["complete"] is completed
     assert entry["status"] == ("completed" if completed else "stopped")
+
+
+@pytest.mark.parametrize("cleanup_fails", [False, True])
+def test_cleanup_runs_once_per_schedule_day_and_never_blocks_ingestion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cleanup_fails: bool
+) -> None:
+    monkeypatch.setattr(Settings, "_config_path", tmp_path / "absent.toml")
+    settings = Settings(
+        app={"timezone": "Europe/Helsinki"},
+        camera={"name": "cam"},
+        paths={
+            "recordings_source_root": tmp_path,
+            "state_db": tmp_path / "state.sqlite3",
+            "output_root": tmp_path / "output",
+        },
+        frigate={"base_url": "http://unused", "recordings_root": "/recordings"},
+        schedule={"start_time": "08:00", "end_time": "20:00"},
+    )
+    store = Mock(spec=StateStore)
+    store.get_day_session.return_value = None
+    store.prune_completed_clip_history.side_effect = [
+        sqlite3.OperationalError("busy") if cleanup_fails else 7,
+        3,
+    ]
+    worker = Mock(spec=ContinuousFFmpegWorker)
+    worker.is_running.return_value = False
+    pipeline = TimelapsePipeline(
+        PipelineServices(
+            settings=settings,
+            store=store,
+            scanner=Mock(spec=FrigateVodScanner),
+            ingestor=Mock(spec=ContinuousClipIngestor),
+            worker=worker,
+            hls_publisher=LiveHLSPublisher(),
+        )
+    )
+    start = datetime(2026, 11, 7, 8, tzinfo=settings.tzinfo)
+    with patch.object(pipeline, "_build_snapshot", return_value=None) as scan:
+        pipeline.run_loop_iteration(start - timedelta(seconds=1))
+        store.prune_completed_clip_history.assert_not_called()
+        for now in [
+            start,
+            start + timedelta(hours=1),
+            start + timedelta(days=1, seconds=-1),
+            start + timedelta(days=1),
+        ]:
+            pipeline.run_loop_iteration(now)
+        assert scan.call_count == 5
+    assert store.prune_completed_clip_history.call_args_list == [
+        call(camera="cam", before_day=start.date()),
+        call(camera="cam", before_day=(start + timedelta(days=1)).date()),
+    ]

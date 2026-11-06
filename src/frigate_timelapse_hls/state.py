@@ -156,6 +156,28 @@ class StateStore:
                 (camera, day.isoformat()),
             )
 
+    def prune_completed_clip_history(self, *, camera: str, before_day: date) -> int:
+        """Retain day summaries and resumable sessions, reclaiming old clip storage."""
+        with self.connection() as connection:
+            cursor = connection.execute(
+                """
+                DELETE FROM ingested_source_clips
+                WHERE camera = ? AND day IN (
+                    SELECT day FROM day_sessions
+                    WHERE camera = ? AND day < ? AND status = ?
+                )
+                """,
+                (camera, camera, before_day.isoformat(), SessionStatus.COMPLETED.value),
+            )
+            removed = cursor.rowcount
+            # VACUUM needs its own transaction. Check free pages even after a no-op
+            # delete so a shutdown between deletion and compaction can recover.
+            connection.commit()
+            if connection.execute("PRAGMA freelist_count").fetchone()[0] > 0:
+                connection.execute("VACUUM")
+                connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            return removed
+
     def list_ingested_clip_ids(self, *, camera: str, day: date) -> set[str]:
         with self.connection() as connection:
             rows = connection.execute(
