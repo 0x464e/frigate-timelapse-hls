@@ -1,8 +1,5 @@
 # Frigate Timelapse HLS
 
-Agents: always keep this README up to date. Remove outdated or unnecessary
-information and add relevant information as the project changes.
-
 An incremental, today-so-far timelapse viewer for Frigate recordings. The Python
 worker reads the original recordings, accelerates them with FFmpeg, and publishes
 HLS video throughout the day. A React player provides a poster, comfortable touch
