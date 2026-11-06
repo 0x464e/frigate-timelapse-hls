@@ -10,7 +10,6 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "icons": "node artwork/build-icons.mjs",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "test": "vitest run",

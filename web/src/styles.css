@@ -93,9 +93,10 @@ a.icon-button:hover {
   font-weight: 650;
   letter-spacing: 0.2em;
 }
-.brand svg {
-  width: 22px;
-  color: var(--accent);
+.brand img {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
 }
 .eyebrow {
   display: inline-flex;
@@ -1144,8 +1145,9 @@ a.icon-button:hover {
     font-size: 10px;
     gap: 8px;
   }
-  .brand svg {
-    width: 20px;
+  .brand img {
+    width: 24px;
+    height: 24px;
   }
   .nav-button {
     padding: 0 13px;

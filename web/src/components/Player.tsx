@@ -7,7 +7,6 @@ import {
   Camera,
   CircleHelp,
   FastForward,
-  Film,
   Maximize,
   Minimize,
   Pause,
@@ -784,7 +783,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
         </div>
         <header className="watch-nav chrome">
           <Link to="/" className="brand" aria-label="Timelapse today">
-            <Film />
+            <img src="/timelapse-icon.svg" alt="" width={28} height={28} />
             <span>TIMELAPSE</span>
           </Link>
           <div className="nav-links">

@@ -16,7 +16,6 @@ import {
   Camera,
   ChevronLeft,
   ChevronRight,
-  Film,
   RefreshCw,
 } from "lucide-react";
 import { emptyState, formatTime, prettyDate, todayIn, validDate } from "./lib";
@@ -86,7 +85,7 @@ function Archive({ library, now }: { library: Library; now: Date }) {
     <div className="archive-page">
       <header className="archive-nav">
         <Link className="brand" to="/">
-          <Film />
+          <img src="/timelapse-icon.svg" alt="" width={28} height={28} />
           <span>TIMELAPSE</span>
         </Link>
         <Link className="nav-button" to="/">
@@ -262,7 +261,7 @@ export default function App() {
   if (!library)
     return (
       <div className="message-page">
-        <Film size={36} strokeWidth={1} />
+        <img src="/timelapse-icon.svg" alt="" width={44} height={44} />
         <span className="eyebrow">TIMELAPSE</span>
         <h1>{error ? "A moment out of reach." : "Finding your days…"}</h1>
         <p role={error ? "alert" : "status"}>
