@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
+from uuid import uuid4
+
+from .publication import atomic_json, atomic_write
 
 
 @dataclass(slots=True, frozen=True)
@@ -30,6 +32,9 @@ class LiveHLSPublisher:
         if reset and publish_dir.exists():
             shutil.rmtree(publish_dir)
         publish_dir.mkdir(parents=True, exist_ok=True)
+        generation_path = publish_dir / "generation.txt"
+        if not generation_path.exists():
+            atomic_write(generation_path, str(uuid4()) + "\n")
         return LiveSessionPaths(
             publish_dir=publish_dir,
             playlist_path=publish_dir / "index.m3u8",
@@ -47,20 +52,11 @@ class LiveHLSPublisher:
     ) -> Path:
         camera_publish_dir = output_root / "published" / camera
         camera_publish_dir.mkdir(parents=True, exist_ok=True)
-        playlist_url = (
-            f"/published/{quote(camera, safe='._-')}/{day_label}/index.m3u8"
-        )
+        playlist_url = f"/published/{quote(camera, safe='._-')}/{day_label}/index.m3u8"
         latest_path = camera_publish_dir / "latest.json"
-        latest_path.write_text(
-            json.dumps(
-                {
-                    "day": day_label,
-                    "playlist_url": playlist_url,
-                },
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
+        atomic_json(
+            latest_path,
+            {"day": day_label, "playlist_url": playlist_url},
         )
         return latest_path
 
@@ -71,7 +67,7 @@ class LiveHLSPublisher:
         normalized = contents.rstrip()
         if "#EXT-X-ENDLIST" not in normalized:
             normalized = f"{normalized}\n#EXT-X-ENDLIST"
-        paths.playlist_path.write_text(f"{normalized}\n", encoding="utf-8")
+        atomic_write(paths.playlist_path, f"{normalized}\n")
         return paths.playlist_path
 
     def prepare_live_playlist_for_resume(self, paths: LiveSessionPaths) -> None:
@@ -82,7 +78,4 @@ class LiveHLSPublisher:
             for line in paths.live_playlist_path.read_text(encoding="utf-8").splitlines()
             if line != "#EXT-X-ENDLIST"
         ]
-        paths.live_playlist_path.write_text(
-            "\n".join(lines).rstrip() + "\n",
-            encoding="utf-8",
-        )
+        atomic_write(paths.live_playlist_path, "\n".join(lines).rstrip() + "\n")

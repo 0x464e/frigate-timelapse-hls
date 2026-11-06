@@ -117,6 +117,10 @@ class StateStore:
             ).fetchone()
         if row is None:
             return None
+        return self._session_from_row(row)
+
+    @staticmethod
+    def _session_from_row(row: sqlite3.Row) -> SessionState:
         return SessionState(
             camera=row["camera"],
             day=date.fromisoformat(row["day"]),
@@ -133,6 +137,13 @@ class StateStore:
             ffmpeg_pid=row["ffmpeg_pid"],
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
+
+    def list_day_sessions(self, *, camera: str) -> dict[date, SessionState]:
+        with self.connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM day_sessions WHERE camera = ?", (camera,)
+            ).fetchall()
+        return {date.fromisoformat(row["day"]): self._session_from_row(row) for row in rows}
 
     def reset_day_session(self, *, camera: str, day: date) -> None:
         with self.connection() as connection:

@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 from .config import Settings
 from .hls import LiveHLSPublisher, LiveSessionPaths
 from .ingest import ContinuousClipIngestor
+from .library import LibraryPublisher
 from .models import (
     LoopResult,
     SessionMode,
@@ -30,6 +31,7 @@ class PipelineServices:
     ingestor: ContinuousClipIngestor
     worker: ContinuousFFmpegWorker
     hls_publisher: LiveHLSPublisher
+    library: LibraryPublisher | None = None
 
 
 class TimelapsePipeline:
@@ -130,6 +132,8 @@ class TimelapsePipeline:
             return result, sleep_seconds
 
         self._ensure_day_session(initial_snapshot)
+        if self._services.library is not None:
+            self._services.library.observe(initial_snapshot)
         existing_state = self._services.store.get_day_session(
             camera=self._services.settings.camera.name,
             day=initial_snapshot.day,
@@ -216,6 +220,8 @@ class TimelapsePipeline:
             if next_snapshot is None:
                 break
             snapshot = next_snapshot
+            if self._services.library is not None:
+                self._services.library.observe(snapshot)
 
         current_state = self._build_session_state(
             snapshot=snapshot,

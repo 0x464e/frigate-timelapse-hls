@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     NoDecode,
@@ -96,6 +96,10 @@ class ScheduleConfig(ConfigModel):
     end_time: time = time(23, 59, 59)
 
 
+class ThumbnailConfig(ConfigModel):
+    offset_seconds: int = Field(default=0, ge=0)
+
+
 class FFmpegConfig(ConfigModel):
     binary: str = "ffmpeg"
     video_codec: str = "libx264"
@@ -132,6 +136,7 @@ class Settings(BaseSettings):
     timelapse: TimelapseConfig = TimelapseConfig()
     schedule: ScheduleConfig = ScheduleConfig()
     ffmpeg: FFmpegConfig = FFmpegConfig()
+    thumbnail: ThumbnailConfig = ThumbnailConfig()
 
     @classmethod
     def settings_customise_sources(
@@ -152,6 +157,12 @@ class Settings(BaseSettings):
     def _validate_schedule(self) -> Settings:
         if self.schedule.end_time <= self.schedule.start_time:
             raise ValueError("schedule.end_time must be later than schedule.start_time")
+        reference_day = date(2000, 1, 1)
+        window = datetime.combine(reference_day, self.schedule.end_time) - datetime.combine(
+            reference_day, self.schedule.start_time
+        )
+        if self.thumbnail.offset_seconds >= window.total_seconds():
+            raise ValueError("thumbnail.offset_seconds must fall within the schedule")
         return self
 
     @property
