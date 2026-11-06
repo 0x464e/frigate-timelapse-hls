@@ -1,6 +1,7 @@
 .venv/
 .uv-cache/
 .idea/
+/AGENTS.md
 __pycache__/
 *.pyc
 *.egg-info/
