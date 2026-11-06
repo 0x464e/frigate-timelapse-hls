@@ -1,3 +1,10 @@
+FROM node:24-bookworm-slim AS frontend
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web ./
+RUN npm run build
+
 FROM debian:trixie-slim
 COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /bin/
 
@@ -14,7 +21,7 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
 COPY src ./src
-COPY web /usr/share/nginx/site
+COPY --from=frontend /web/dist /usr/share/nginx/site
 COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
 
 RUN apt-get update \
