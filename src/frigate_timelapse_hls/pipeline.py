@@ -59,7 +59,11 @@ class TimelapsePipeline:
             day=state.day,
             session_start=state.session_start,
             session_end=state.session_end,
-            status=SessionStatus.STOPPED,
+            status=(
+                SessionStatus.COMPLETED
+                if state.status == SessionStatus.COMPLETED
+                else SessionStatus.STOPPED
+            ),
             mode=state.mode,
             playlist_path=state.playlist_path,
             segment_dir=state.segment_dir,
