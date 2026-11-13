@@ -4,6 +4,7 @@ export interface Day {
   poster_url: string | null;
   playlist_url: string;
   live_playlist_url: string;
+  source_times_url?: string | null;
   duration: number;
   ready: boolean;
   recordings_available?: boolean;
@@ -20,6 +21,7 @@ export interface Day {
 export interface Library {
   version: 1;
   camera: string;
+  frigate_url?: string | null;
   timezone: string;
   schedule: { start: string; end: string };
   thumbnail_offset_seconds: number;

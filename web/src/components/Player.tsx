@@ -39,6 +39,12 @@ import {
 } from "../lib";
 import type { Day, Library } from "../types";
 import { SpeedPopover } from "./SpeedPopover";
+import {
+  RecordingJump,
+  presentedFrame,
+  type BufferedSegment,
+  type PresentedFrame,
+} from "./RecordingJump";
 import { Timeline } from "./Timeline";
 import { useMediaQuery } from "../useMediaQuery";
 import { useVideoZoom } from "../useVideoZoom";
@@ -58,6 +64,10 @@ type OrientationLock = ScreenOrientation & {
 
 export function Player({ library, day, date, now, onStart }: Props) {
   const video = useRef<HTMLVideoElement>(null);
+  const fragments = useRef(new Map<string, BufferedSegment>());
+  const latestFrame = useRef<PresentedFrame | null>(null);
+  const [pausedFrame, setPausedFrame] = useState<PresentedFrame | null>(null);
+  const trackFrames = Boolean(library.frigate_url);
   const shell = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const desiredPlayback = useRef(false);
@@ -204,6 +214,9 @@ export function Player({ library, day, date, now, onStart }: Props) {
     let destroy = () => {};
     let recoveries = 0;
     let manifestLoaded = false;
+    let frameCallback: number | undefined;
+    fragments.current.clear();
+    latestFrame.current = null;
     loadingSource.current = true;
     const begin = () => {
       if (cancelled) return;
@@ -262,6 +275,35 @@ export function Player({ library, day, date, now, onStart }: Props) {
           },
         });
         destroy = () => hls.destroy();
+        if (trackFrames && element.requestVideoFrameCallback) {
+          hls.on(Hls.Events.FRAG_BUFFERED, (_, { frag }) => {
+            const name = frag.relurl;
+            if (
+              name &&
+              frag.startPTS !== undefined &&
+              frag.endPTS !== undefined
+            ) {
+              fragments.current.set(name, {
+                name,
+                start: frag.startPTS,
+                end: frag.endPTS,
+              });
+            }
+          });
+          const track = (
+            _: number,
+            { mediaTime }: VideoFrameCallbackMetadata,
+          ) => {
+            latestFrame.current = presentedFrame(
+              mediaTime,
+              fragments.current.values(),
+            );
+            if (element.paused && !element.seeking)
+              setPausedFrame(latestFrame.current);
+            frameCallback = element.requestVideoFrameCallback(track);
+          };
+          frameCallback = element.requestVideoFrameCallback(track);
+        }
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           manifestLoaded = true;
           begin();
@@ -295,12 +337,15 @@ export function Player({ library, day, date, now, onStart }: Props) {
       cancelled = true;
       loadingSource.current = true;
       initialPosition.current = position.current;
+      if (frameCallback !== undefined)
+        element.cancelVideoFrameCallback(frameCallback);
+      latestFrame.current = null;
       destroy();
       element.pause();
       element.removeAttribute("src");
       element.load();
     };
-  }, [started, source, sourceMode, retry]);
+  }, [started, source, sourceMode, retry, trackFrames]);
 
   useEffect(() => {
     selectedRate.current = (boosting ? Math.min(speed * 2, 40) : speed) / 10;
@@ -604,6 +649,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                 setTime(value);
               }}
               onDurationChange={measure}
+              onEmptied={() => setPausedFrame(null)}
               onProgress={measure}
               onLoadedMetadata={() => {
                 measure();
@@ -612,6 +658,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
               onPlay={() => {
                 desiredPlayback.current = true;
                 setPaused(false);
+                setPausedFrame(null);
                 setCenterRequested(false);
                 showControls(mobile ? 600 : 2800);
               }}
@@ -620,9 +667,19 @@ export function Player({ library, day, date, now, onStart }: Props) {
                 if (!loadingSource.current && !video.current?.ended)
                   desiredPlayback.current = false;
                 setPaused(true);
+                setPausedFrame(
+                  video.current?.seeking ? null : latestFrame.current,
+                );
                 setCenterRequested(true);
                 cancelBoost();
                 showControls();
+              }}
+              onSeeking={() => {
+                latestFrame.current = null;
+                setPausedFrame(null);
+              }}
+              onSeeked={() => {
+                if (video.current?.paused) setPausedFrame(latestFrame.current);
               }}
               onPlaying={() => {
                 loadingSource.current = false;
@@ -805,6 +862,19 @@ export function Player({ library, day, date, now, onStart }: Props) {
         </header>
         {started && (
           <div className="player-bottom chrome">
+            {paused &&
+              !error &&
+              !scrubbing &&
+              pausedFrame &&
+              day?.source_times_url &&
+              library.frigate_url && (
+                <RecordingJump
+                  day={day}
+                  library={library}
+                  frame={pausedFrame}
+                  now={now}
+                />
+              )}
             <Timeline
               time={time}
               duration={duration}

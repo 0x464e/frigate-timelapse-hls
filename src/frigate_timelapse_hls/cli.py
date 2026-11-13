@@ -44,7 +44,8 @@ def load_pipeline(settings: Settings, library: LibraryPublisher | None = None) -
         scanner=scanner,
         ingestor=ContinuousClipIngestor(settings.ffmpeg),
         worker=ContinuousFFmpegWorker(
-            ContinuousFFmpegCommandBuilder(settings.ffmpeg, settings.timelapse)
+            ContinuousFFmpegCommandBuilder(settings.ffmpeg, settings.timelapse),
+            track_source_time=settings.frigate.public_url is not None,
         ),
         hls_publisher=LiveHLSPublisher(),
         library=library,

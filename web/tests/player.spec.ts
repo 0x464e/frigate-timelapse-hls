@@ -82,7 +82,12 @@ const makeDay = (value: string): Day => ({
   schedule_end: null,
   render_speed: 288,
 });
-async function fixture(page: Page, growing = false, poster = false) {
+async function fixture(
+  page: Page,
+  growing = false,
+  poster = false,
+  recordingJump = false,
+) {
   let broken = false;
   let failedSegments = 0;
   let segments = growing ? 3 : 12;
@@ -104,12 +109,42 @@ async function fixture(page: Page, growing = false, poster = false) {
       { ...makeDay("2026-04-22"), complete: true, stream_ended: true },
     ],
   };
+  if (recordingJump) {
+    day.source_times_url = `/published/test/${date}/source-times/`;
+    library.frigate_url = "https://frigate.example/";
+  }
   const media: string[] = [];
   await page.route("**/published/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith("library.json"))
       return route.fulfill({ json: library });
     media.push(url.pathname + url.search);
+    const segmentMap = /\/source-times\/(segment-(\d+)\.ts)\.json$/.exec(
+      url.pathname,
+    );
+    if (recordingJump && segmentMap) {
+      return route.fulfill({
+        json: {
+          version: 1,
+          generation_id: day.generation_id,
+          segment: segmentMap[1],
+          frames: Array.from({ length: 24 }, (_, frame) => [
+            3750 * frame,
+            (1700000000 + Number(segmentMap[2]) * 100 + frame) * 1000,
+          ]),
+        },
+      });
+    }
+    if (recordingJump && url.pathname.endsWith("recording-coverage.json")) {
+      return route.fulfill({
+        json: {
+          version: 1,
+          camera: "test",
+          checked_at: Date.now() / 1000,
+          ranges: [[1700000000, 1700000200]],
+        },
+      });
+    }
     if (url.pathname.endsWith("poster.jpg"))
       return route.fulfill({
         body: readFileSync(`${directory}poster.jpg`),
@@ -182,6 +217,47 @@ async function fixture(page: Page, growing = false, poster = false) {
     },
   };
 }
+
+test("paused Frigate jump follows seeks and disables expired footage", async ({
+  page,
+}) => {
+  const { media } = await fixture(page, false, false, true);
+  await page.goto("/");
+  const play = page.getByRole("button", {
+    name: "Play timelapse",
+    exact: true,
+  });
+  await expect(play).toBeVisible();
+  expect(media).toHaveLength(0);
+  await play.click();
+  await expect
+    .poll(() => videoState(page).then((state) => state.time))
+    .toBeGreaterThan(0.15);
+  await expect(page.getByRole("link", { name: "Open in Frigate" })).toHaveCount(
+    0,
+  );
+  const video = page.locator("video");
+  await video.evaluate((element) => {
+    const media = element as HTMLVideoElement;
+    media.pause();
+    media.currentTime = 1.26;
+  });
+  await expect(
+    page.getByRole("link", { name: "Open in Frigate" }),
+  ).toHaveAttribute(
+    "href",
+    "https://frigate.example/review?timestamp=test_1700000106",
+  );
+  await video.evaluate((element) => {
+    (element as HTMLVideoElement).currentTime = 2.26;
+  });
+  await expect(
+    page.getByRole("button", { name: "Original recording unavailable" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Open in Frigate" })).toHaveCount(
+    0,
+  );
+});
 
 test("poster waits for Play; real HLS plays and speed does not persist", async ({
   page,

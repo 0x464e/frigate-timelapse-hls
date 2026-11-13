@@ -13,13 +13,15 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Event, Lock, Thread
+from time import monotonic
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from urllib.request import urlopen
 
 from .config import Settings
 from .models import SessionSnapshot
 from .publication import atomic_json, atomic_write
+from .source_time import MAP_DIRECTORY
 from .state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -104,6 +106,7 @@ class LibraryPublisher:
         self._thread: Thread | None = None
         self._request: PosterRequest | None = None
         self._publish_lock = Lock()
+        self._next_coverage_refresh = 0.0
 
     def start(self) -> None:
         self.publish()
@@ -121,9 +124,52 @@ class LibraryPublisher:
             try:
                 self.process_poster()
                 self.publish()
+                if self.settings.frigate.public_url and monotonic() >= self._next_coverage_refresh:
+                    self._next_coverage_refresh = monotonic() + 60
+                    self._publish_recording_coverage()
             except Exception:
                 logger.exception("Web publication failed; timelapse ingestion continues")
             self._stop.wait(5)
+
+    def _publish_recording_coverage(self) -> None:
+        """Refresh coverage at the one-second resolution used by Frigate links."""
+        camera = quote(self.settings.camera.name, safe="")
+        api = f"{self.settings.frigate.base_url}/api"
+        now = datetime.now(self.settings.tzinfo)
+        before = int(now.timestamp())
+        query = urlencode({"timezone": self.settings.app.timezone})
+        with urlopen(f"{api}/{camera}/recordings/summary?{query}", timeout=5) as response:
+            summary = json.load(response)
+        if not isinstance(summary, list):
+            raise ValueError("Invalid Frigate recording summary")
+        dates = [datetime.strptime(row["day"], "%Y-%m-%d").date() for row in summary]
+        ranges: list[list[int]] = []
+        if dates:
+            # Use the gaps API to avoid downloading every recording row each minute.
+            after = int(datetime.combine(min(dates), datetime.min.time(), now.tzinfo).timestamp())
+            query = urlencode({
+                "cameras": self.settings.camera.name, "after": after, "before": before, "scale": 1,
+            })
+            with urlopen(f"{api}/recordings/unavailable?{query}", timeout=5) as response:
+                gaps = json.load(response)
+            if not isinstance(gaps, list):
+                raise ValueError("Invalid Frigate recording gaps")
+            cursor = after
+            for gap in sorted(gaps, key=lambda row: row["start_time"]):
+                start, end = int(gap["start_time"]), int(gap["end_time"])
+                if end <= start:
+                    raise ValueError("Invalid Frigate recording gap")
+                if cursor < min(start, before):
+                    ranges.append([cursor, min(start, before)])
+                cursor = max(cursor, end)
+            if cursor < before:
+                ranges.append([cursor, before])
+        atomic_json(self.root / "recording-coverage.json", {
+            "version": 1,
+            "camera": self.settings.camera.name,
+            "checked_at": now.timestamp(),
+            "ranges": ranges,
+        })
 
     def observe(self, snapshot: SessionSnapshot) -> None:
         """Capture schedule identity and choose a poster without doing network I/O."""
@@ -297,6 +343,9 @@ class LibraryPublisher:
                     else None,
                     "playlist_url": f"{base}/index.m3u8",
                     "live_playlist_url": f"{base}/live.m3u8",
+                    "source_times_url": f"{base}/{MAP_DIRECTORY}/"
+                    if self.settings.frigate.public_url and (directory / MAP_DIRECTORY).is_dir()
+                    else None,
                     "duration": summary.duration,
                     "ready": summary.ready,
                     "recordings_available": session.get("recordings_available", False)
@@ -325,6 +374,8 @@ class LibraryPublisher:
             },
             "thumbnail_offset_seconds": self.settings.thumbnail.offset_seconds,
             "published_at": now.isoformat(),
+            "frigate_url": str(self.settings.frigate.public_url)
+            if self.settings.frigate.public_url else None,
             "days": sorted(entries, key=lambda item: item["date"], reverse=True),
         }
         atomic_json(self.root / "library.json", manifest)
