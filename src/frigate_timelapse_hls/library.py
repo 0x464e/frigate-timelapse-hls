@@ -15,7 +15,7 @@ from pathlib import Path
 from threading import Event, Lock, Thread
 from time import monotonic
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 from urllib.request import urlopen
 
 from .config import Settings
@@ -106,7 +106,8 @@ class LibraryPublisher:
         self._thread: Thread | None = None
         self._request: PosterRequest | None = None
         self._publish_lock = Lock()
-        self._next_coverage_refresh = 0.0
+        self._next_retention_refresh = monotonic()
+        self._retention_days: float | None = None
 
     def start(self) -> None:
         self.publish()
@@ -123,53 +124,32 @@ class LibraryPublisher:
         while not self._stop.is_set():
             try:
                 self.process_poster()
+                self._refresh_retention()
                 self.publish()
-                if self.settings.frigate.public_url and monotonic() >= self._next_coverage_refresh:
-                    self._next_coverage_refresh = monotonic() + 60
-                    self._publish_recording_coverage()
             except Exception:
                 logger.exception("Web publication failed; timelapse ingestion continues")
             self._stop.wait(5)
 
-    def _publish_recording_coverage(self) -> None:
-        """Refresh coverage at the one-second resolution used by Frigate links."""
-        camera = quote(self.settings.camera.name, safe="")
-        api = f"{self.settings.frigate.base_url}/api"
-        now = datetime.now(self.settings.tzinfo)
-        before = int(now.timestamp())
-        query = urlencode({"timezone": self.settings.app.timezone})
-        with urlopen(f"{api}/{camera}/recordings/summary?{query}", timeout=5) as response:
-            summary = json.load(response)
-        if not isinstance(summary, list):
-            raise ValueError("Invalid Frigate recording summary")
-        dates = [datetime.strptime(row["day"], "%Y-%m-%d").date() for row in summary]
-        ranges: list[list[int]] = []
-        if dates:
-            # Use the gaps API to avoid downloading every recording row each minute.
-            after = int(datetime.combine(min(dates), datetime.min.time(), now.tzinfo).timestamp())
-            query = urlencode({
-                "cameras": self.settings.camera.name, "after": after, "before": before, "scale": 1,
-            })
-            with urlopen(f"{api}/recordings/unavailable?{query}", timeout=5) as response:
-                gaps = json.load(response)
-            if not isinstance(gaps, list):
-                raise ValueError("Invalid Frigate recording gaps")
-            cursor = after
-            for gap in sorted(gaps, key=lambda row: row["start_time"]):
-                start, end = int(gap["start_time"]), int(gap["end_time"])
-                if end <= start:
-                    raise ValueError("Invalid Frigate recording gap")
-                if cursor < min(start, before):
-                    ranges.append([cursor, min(start, before)])
-                cursor = max(cursor, end)
-            if cursor < before:
-                ranges.append([cursor, before])
-        atomic_json(self.root / "recording-coverage.json", {
-            "version": 1,
-            "camera": self.settings.camera.name,
-            "checked_at": now.timestamp(),
-            "ranges": ranges,
-        })
+    def _refresh_retention(self) -> None:
+        frigate = self.settings.frigate
+        if not frigate.public_url:
+            return
+        now = monotonic()
+        if now < self._next_retention_refresh:
+            return
+        self._next_retention_refresh = now + 300
+        try:
+            with urlopen(f"{frigate.base_url}/api/config", timeout=5) as response:
+                config = json.load(response)
+            continuous = config["cameras"][self.settings.camera.name]["record"]["continuous"]
+            days = continuous["days"]
+            if type(days) not in (int, float) or not math.isfinite(days) or days < 0:
+                raise ValueError("Invalid Frigate continuous retention")
+            # Zero means continuous retention is off. Other policies may still
+            # keep recordings, so use an unrestricted link window in that case.
+            self._retention_days = days if days > 0 else None
+        except (OSError, ValueError, KeyError, TypeError, OverflowError):
+            logger.warning("Unable to read Frigate retention; keeping the current link window")
 
     def observe(self, snapshot: SessionSnapshot) -> None:
         """Capture schedule identity and choose a poster without doing network I/O."""
@@ -376,6 +356,7 @@ class LibraryPublisher:
             "published_at": now.isoformat(),
             "frigate_url": str(self.settings.frigate.public_url)
             if self.settings.frigate.public_url else None,
+            "frigate_retention_days": self._retention_days,
             "days": sorted(entries, key=lambda item: item["date"], reverse=True),
         }
         atomic_json(self.root / "library.json", manifest)

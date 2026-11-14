@@ -22,6 +22,7 @@ export interface Library {
   version: 1;
   camera: string;
   frigate_url?: string | null;
+  frigate_retention_days?: number | null;
   timezone: string;
   schedule: { start: string; end: string };
   thumbnail_offset_seconds: number;

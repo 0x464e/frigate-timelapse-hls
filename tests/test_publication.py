@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from io import BytesIO
@@ -52,6 +53,40 @@ def test_thumbnail_environment(monkeypatch, settings: Settings) -> None:
     data = settings.model_dump()
     data.pop("thumbnail")
     assert Settings(**data).thumbnail.offset_seconds == 90
+
+
+def test_frigate_retention_refresh_and_failure(settings: Settings) -> None:
+    data = settings.model_dump()
+    data["frigate"]["public_url"] = "https://frigate.example"
+    enabled = Settings(**data)
+    publisher = LibraryPublisher(enabled, StateStore(settings.paths.state_db))
+
+    def config(days: float) -> BytesIO:
+        return BytesIO(json.dumps({
+            "cameras": {settings.camera.name: {"record": {"continuous": {"days": days}}}},
+        }).encode())
+
+    assert publisher.publish()["frigate_retention_days"] is None
+    with (
+        patch("frigate_timelapse_hls.library.monotonic") as clock,
+        patch(
+            "frigate_timelapse_hls.library.urlopen",
+            side_effect=[config(3), OSError("Frigate unavailable"), config(1.5), config(0)],
+        ) as fetch,
+    ):
+        start = publisher._next_retention_refresh
+        clock.return_value = start
+        publisher._refresh_retention()
+        fetch.assert_called_once_with("http://frigate:5000/api/config", timeout=5)
+        assert publisher.publish()["frigate_retention_days"] == 3
+        clock.return_value = start + 299
+        publisher._refresh_retention()
+        assert fetch.call_count == 1
+        for elapsed, expected in [(300, 3), (600, 1.5), (900, None)]:
+            clock.return_value = start + elapsed
+            publisher._refresh_retention()
+            assert publisher.publish()["frigate_retention_days"] == expected
+        assert fetch.call_count == 4
 
 
 def test_atomic_write_permissions_and_replacement(tmp_path: Path) -> None:

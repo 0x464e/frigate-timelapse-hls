@@ -65,6 +65,8 @@ test.afterEach(({ page }) => {
 const date = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Europe/Helsinki",
 }).format(new Date());
+const retentionTestTime = new Date(`${date}T12:00:00Z`);
+const retentionTestSource = retentionTestTime.getTime() / 1000 - 3 * 86400 - 50;
 const makeDay = (value: string): Day => ({
   date: value,
   generation_id: "test-one",
@@ -112,6 +114,7 @@ async function fixture(
   if (recordingJump) {
     day.source_times_url = `/published/test/${date}/source-times/`;
     library.frigate_url = "https://frigate.example/";
+    library.frigate_retention_days = 3;
   }
   const media: string[] = [];
   await page.route("**/published/**", async (route) => {
@@ -130,18 +133,8 @@ async function fixture(
           segment: segmentMap[1],
           frames: Array.from({ length: 24 }, (_, frame) => [
             3750 * frame,
-            (1700000000 + Number(segmentMap[2]) * 100 + frame) * 1000,
+            (retentionTestSource + Number(segmentMap[2]) * 100 + frame) * 1000,
           ]),
-        },
-      });
-    }
-    if (recordingJump && url.pathname.endsWith("recording-coverage.json")) {
-      return route.fulfill({
-        json: {
-          version: 1,
-          camera: "test",
-          checked_at: Date.now() / 1000,
-          ranges: [[1700000000, 1700000200]],
         },
       });
     }
@@ -185,6 +178,9 @@ async function fixture(
   });
   return {
     media,
+    setRetention: (days: number | null) => {
+      library.frigate_retention_days = days;
+    },
     startDay: (value: string, ready = true) => {
       library.days.unshift({
         ...makeDay(value),
@@ -221,7 +217,8 @@ async function fixture(
 test("paused Frigate jump follows seeks and disables expired footage", async ({
   page,
 }) => {
-  const { media } = await fixture(page, false, false, true);
+  await page.clock.setFixedTime(retentionTestTime);
+  const { media, setRetention } = await fixture(page, false, false, true);
   await page.goto("/");
   const play = page.getByRole("button", {
     name: "Play timelapse",
@@ -246,16 +243,31 @@ test("paused Frigate jump follows seeks and disables expired footage", async ({
     page.getByRole("link", { name: "Open in Frigate" }),
   ).toHaveAttribute(
     "href",
-    "https://frigate.example/review?timestamp=test_1700000106",
+    `https://frigate.example/review?timestamp=test_${retentionTestSource + 106}`,
   );
   await video.evaluate((element) => {
-    (element as HTMLVideoElement).currentTime = 2.26;
+    (element as HTMLVideoElement).currentTime = 0.26;
   });
   await expect(
-    page.getByRole("button", { name: "Original recording unavailable" }),
+    page.getByRole("button", {
+      name: "Outside the recording retention window",
+    }),
   ).toBeDisabled();
   await expect(page.getByRole("link", { name: "Open in Frigate" })).toHaveCount(
     0,
+  );
+  setRetention(4);
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
+  await expect(
+    page.getByRole("link", { name: "Open in Frigate" }),
+  ).toHaveAttribute(
+    "href",
+    `https://frigate.example/review?timestamp=test_${retentionTestSource + 6}`,
+  );
+  expect(media.some((url) => url.includes("recording-coverage.json"))).toBe(
+    false,
   );
 });
 

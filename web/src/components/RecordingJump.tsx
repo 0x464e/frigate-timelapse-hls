@@ -20,13 +20,6 @@ interface SourceTimes {
   frames: [ticks: number, sourceMilliseconds: number][];
 }
 
-interface Coverage {
-  version: 1;
-  camera: string;
-  checked_at: number;
-  ranges: [number, number][];
-}
-
 export function presentedFrame(
   mediaTime: number,
   segments: Iterable<BufferedSegment>,
@@ -68,7 +61,6 @@ export function RecordingJump({
   now: Date;
 }) {
   const [sourceTimes, setSourceTimes] = useState<SourceTimes | null>(null);
-  const [coverage, setCoverage] = useState<Coverage | null>(null);
   const { source_times_url: mapUrl, generation_id: generation } = day;
   const { segment } = frame;
   const camera = library.camera;
@@ -88,13 +80,10 @@ export function RecordingJump({
       const signal = request.signal;
       const timeout = window.setTimeout(() => request?.abort(), 8000);
       try {
-        const [map, retained] = await Promise.allSettled([
-          json<SourceTimes>(segmentUrl, signal),
-          json<Coverage>("/published/recording-coverage.json", signal),
-        ]);
-        if (signal.aborted) return;
-        if (map.status === "fulfilled") setSourceTimes(map.value);
-        if (retained.status === "fulfilled") setCoverage(retained.value);
+        const map = await json<SourceTimes>(segmentUrl, signal);
+        if (!signal.aborted) setSourceTimes(map);
+      } catch {
+        // The segment can finish publishing while the player is paused.
       } finally {
         window.clearTimeout(timeout);
       }
@@ -120,14 +109,12 @@ export function RecordingJump({
   if (source === undefined || !Number.isFinite(source) || !library.frigate_url)
     return null;
   const second = Math.floor(source / 1000);
-  const fresh =
-    coverage?.version === 1 &&
-    coverage.camera === camera &&
-    Array.isArray(coverage.ranges) &&
-    Math.abs(now.getTime() / 1000 - coverage.checked_at) <= 150;
+  const days = library.frigate_retention_days;
   const available =
-    fresh &&
-    coverage.ranges.some(([start, end]) => start <= second && second < end);
+    typeof days !== "number" ||
+    !Number.isFinite(days) ||
+    days <= 0 ||
+    now.getTime() - source < days * 86_400_000;
   let url: URL;
   try {
     url = new URL(library.frigate_url);
@@ -155,9 +142,7 @@ export function RecordingJump({
         </a>
       ) : (
         <button type="button" disabled>
-          {fresh
-            ? "Original recording unavailable"
-            : "Recording availability unknown"}
+          Outside the recording retention window
         </button>
       )}
     </div>
