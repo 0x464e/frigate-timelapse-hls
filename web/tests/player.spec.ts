@@ -217,6 +217,8 @@ async function fixture(
 test("Frigate jump stays in the controls during playback, seeks, and expiry", async ({
   page,
 }, testInfo) => {
+  if (testInfo.project.name === "android")
+    await page.setViewportSize({ width: 320, height: 700 });
   await page.clock.setFixedTime(retentionTestTime);
   const { media, setRetention } = await fixture(page, false, false, true);
   await page.goto("/");
@@ -255,9 +257,16 @@ test("Frigate jump stays in the controls during playback, seeks, and expiry", as
     `https://frigate.example/review?timestamp=test_${retentionTestSource + 106}`,
   );
   await expect(jump).toHaveAttribute("title", /^Jump to .+ in Frigate$/);
-  const label = jump.getByText("Open in Frigate", { exact: true });
-  if (testInfo.project.name === "android") await expect(label).toBeHidden();
-  else await expect(label).toBeVisible();
+  await expect(
+    jump.getByText("Open in Frigate", { exact: true }),
+  ).toBeVisible();
+  if (testInfo.project.name === "android") {
+    const fullscreen = await page
+      .getByRole("button", { name: "Enter fullscreen" })
+      .boundingBox();
+    expect(fullscreen).not.toBeNull();
+    expect(fullscreen!.x + fullscreen!.width).toBeLessThanOrEqual(320);
+  }
   await video.evaluate((element) => {
     (element as HTMLVideoElement).currentTime = 0.26;
   });

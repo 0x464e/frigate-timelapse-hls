@@ -425,9 +425,6 @@ a.icon-button:hover {
   width: 16px;
   height: 16px;
 }
-.touch-player .recording-jump-label {
-  display: none;
-}
 .recording-jump:disabled {
   color: var(--muted);
   opacity: 0.55;
@@ -1159,8 +1156,12 @@ a.icon-button:hover {
   }
 }
 @media (max-width: 620px) {
-  .recording-jump-label {
-    display: none;
+  .control-bar {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .control-bar > .control-group:last-child {
+    margin-inline-start: auto;
   }
   .watch-nav {
     padding: max(10px, env(safe-area-inset-top)) 14px 12px;
