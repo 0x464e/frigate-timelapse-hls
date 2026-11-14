@@ -166,7 +166,8 @@ export function RecordingJump({
             : "Original timestamp unavailable"
         }
       >
-        <ExternalLink />
+        <ExternalLink aria-hidden="true" />
+        <span className="recording-jump-label">Open in Frigate</span>
       </button>
     );
   }
@@ -197,9 +198,10 @@ export function RecordingJump({
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Open in Frigate"
-      title={`Open in Frigate · ${time}`}
+      title={`Jump to ${time} in Frigate`}
     >
-      <ExternalLink />
+      <ExternalLink aria-hidden="true" />
+      <span className="recording-jump-label">Open in Frigate</span>
     </a>
   );
 }

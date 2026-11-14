@@ -216,7 +216,7 @@ async function fixture(
 
 test("Frigate jump stays in the controls during playback, seeks, and expiry", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.clock.setFixedTime(retentionTestTime);
   const { media, setRetention } = await fixture(page, false, false, true);
   await page.goto("/");
@@ -254,6 +254,10 @@ test("Frigate jump stays in the controls during playback, seeks, and expiry", as
     "href",
     `https://frigate.example/review?timestamp=test_${retentionTestSource + 106}`,
   );
+  await expect(jump).toHaveAttribute("title", /^Jump to .+ in Frigate$/);
+  const label = jump.getByText("Open in Frigate", { exact: true });
+  if (testInfo.project.name === "android") await expect(label).toBeHidden();
+  else await expect(label).toBeVisible();
   await video.evaluate((element) => {
     (element as HTMLVideoElement).currentTime = 0.26;
   });
