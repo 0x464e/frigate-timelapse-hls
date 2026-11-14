@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.3.1...v0.4.0) (2026-11-14)
+
+
+### Features
+
+* add optional Frigate URL configuration for recording links ([941208f](https://github.com/0x464e/frigate-timelapse-hls/commit/941208f6bc27c8d98a8d2e41cf574767fb691dc7))
+* add playback control tooltips ([941208f](https://github.com/0x464e/frigate-timelapse-hls/commit/941208f6bc27c8d98a8d2e41cf574767fb691dc7))
+* jump from paused timelapse to Frigate recording ([#8](https://github.com/0x464e/frigate-timelapse-hls/issues/8)) ([941208f](https://github.com/0x464e/frigate-timelapse-hls/commit/941208f6bc27c8d98a8d2e41cf574767fb691dc7))
+* respect Frigate recording retention when showing jump links ([941208f](https://github.com/0x464e/frigate-timelapse-hls/commit/941208f6bc27c8d98a8d2e41cf574767fb691dc7))
+
 ## [0.3.1](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.3.0...v0.3.1) (2026-11-06)
 
 
