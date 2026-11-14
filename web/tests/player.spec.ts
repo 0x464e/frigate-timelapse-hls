@@ -214,7 +214,7 @@ async function fixture(
   };
 }
 
-test("paused Frigate jump follows seeks and disables expired footage", async ({
+test("Frigate jump stays in the controls during playback, seeks, and expiry", async ({
   page,
 }) => {
   await page.clock.setFixedTime(retentionTestTime);
@@ -230,10 +230,19 @@ test("paused Frigate jump follows seeks and disables expired footage", async ({
   await expect
     .poll(() => videoState(page).then((state) => state.time))
     .toBeGreaterThan(0.15);
-  await expect(page.getByRole("link", { name: "Open in Frigate" })).toHaveCount(
-    0,
-  );
   const video = page.locator("video");
+  const jump = page
+    .locator(".control-bar")
+    .getByRole("link", { name: "Open in Frigate" });
+  await expect(jump).toHaveAttribute(
+    "href",
+    new RegExp(
+      `timestamp=test_(${Array.from({ length: 24 }, (_, i) => retentionTestSource + 100 + i).join("|")})$`,
+    ),
+  );
+  const firstHref = await jump.getAttribute("href");
+  await expect(jump).not.toHaveAttribute("href", firstHref!);
+  expect((await videoState(page)).paused).toBe(false);
   await video.evaluate((element) => {
     const media = element as HTMLVideoElement;
     media.pause();
@@ -249,9 +258,9 @@ test("paused Frigate jump follows seeks and disables expired footage", async ({
     (element as HTMLVideoElement).currentTime = 0.26;
   });
   await expect(
-    page.getByRole("button", {
-      name: "Outside the recording retention window",
-    }),
+    page
+      .locator(".control-bar")
+      .getByRole("button", { name: "Open in Frigate" }),
   ).toBeDisabled();
   await expect(page.getByRole("link", { name: "Open in Frigate" })).toHaveCount(
     0,
