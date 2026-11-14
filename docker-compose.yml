@@ -21,6 +21,8 @@ services:
       FTHLS_APP_RESTART_POLICY: resume
       FTHLS_CAMERA_NAME: mycamera
       FTHLS_FRIGATE_BASE_URL: http://192.168.10.6:5000
+      # Optional. Enables Open in Frigate for timelapses encoded with source mapping.
+      # FTHLS_FRIGATE_PUBLIC_URL: https://frigate.example.com
       FTHLS_FRIGATE_RECORDINGS_ROOT: /media/frigate/recordings
       FTHLS_TIMELAPSE_TIMELAPSE_SPEED: "288.0"
       FTHLS_TIMELAPSE_OUTPUT_FPS: "60"

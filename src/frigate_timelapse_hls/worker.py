@@ -9,6 +9,7 @@ from threading import Thread
 
 from .config import FFmpegConfig, TimelapseConfig
 from .hls import LiveSessionPaths
+from .source_time import SourceTimeMap, ffprobe_path
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,11 @@ class ContinuousFFmpegCommandBuilder:
         self._config = config
         self._timelapse = timelapse
 
-    def build(self, plan: WorkerSessionPlan) -> list[str]:
+    @property
+    def binary(self) -> str:
+        return self._config.binary
+
+    def build(self, plan: WorkerSessionPlan, source_time: SourceTimeMap | None = None) -> list[str]:
         speedup_filter = f"setpts=PTS/{self._timelapse.timelapse_speed}"
         fps_filter = f"fps={self._timelapse.output_fps}"
         command = [
@@ -38,6 +43,7 @@ class ContinuousFFmpegCommandBuilder:
             "-nostdin",
             "-y",
             *self._config.custom_input_args,
+            *(["-copyts"] if source_time else []),
             "-fflags",
             "+genpts",
             "-f",
@@ -66,6 +72,15 @@ class ContinuousFFmpegCommandBuilder:
                 command.extend(["-preset", self._config.preset])
             if self._config.profile:
                 command.extend(["-profile:v", self._config.profile])
+        if source_time is not None:
+            command.extend(
+                [
+                    "-stats_mux_pre:v:0",
+                    str(source_time.stats_path),
+                    "-stats_mux_pre_fmt:v:0",
+                    "{ptsi} {tbi} {pts} {dts} {tb}",
+                ]
+            )
         command.extend(
             [
                 "-f",
@@ -112,7 +127,9 @@ class ContinuousFFmpegCommandBuilder:
 
 
 class ContinuousFFmpegWorker:
-    def __init__(self, builder: ContinuousFFmpegCommandBuilder) -> None:
+    def __init__(
+        self, builder: ContinuousFFmpegCommandBuilder, *, track_source_time: bool = False
+    ) -> None:
         self._builder = builder
         self._process: subprocess.Popen[bytes] | None = None
         self._stdout_thread: Thread | None = None
@@ -120,6 +137,10 @@ class ContinuousFFmpegWorker:
         self._last_progress_line: str | None = None
         self._stderr_tail: deque[str] = deque(maxlen=20)
         self._command: list[str] = []
+        self._source_probe = ffprobe_path(builder.binary) if track_source_time else None
+        if track_source_time and not self._source_probe:
+            logger.warning("Source timestamp mapping requires ffprobe")
+        self.source_time: SourceTimeMap | None = None
 
     @property
     def pid(self) -> int | None:
@@ -131,7 +152,11 @@ class ContinuousFFmpegWorker:
     def start(self, plan: WorkerSessionPlan) -> None:
         if self.is_running():
             return
-        command = self._builder.build(plan)
+        if self.source_time is not None:
+            self._finish_source_time()
+        if self._source_probe:
+            self.source_time = SourceTimeMap(plan.paths, self._source_probe)
+        command = self._builder.build(plan, self.source_time)
         self._command = command
         self._stderr_tail.clear()
         logger.info("Starting continuous FFmpeg worker for %s", plan.day_label)
@@ -160,8 +185,14 @@ class ContinuousFFmpegWorker:
         if not self.is_running() or self._process is None or self._process.stdin is None:
             raise RuntimeError(self._format_process_failure())
         try:
-            self._process.stdin.write(payload)
-            self._process.stdin.flush()
+            stream = self._process.stdin
+            remaining = memoryview(payload)
+            while remaining:
+                written = stream.write(remaining)
+                if not written:
+                    raise BrokenPipeError
+                remaining = remaining[written:]
+            stream.flush()
         except BrokenPipeError as exc:
             raise RuntimeError(self._format_process_failure()) from exc
 
@@ -172,6 +203,7 @@ class ContinuousFFmpegWorker:
             self._process.stdin.close()
         self._process.wait(timeout=30)
         self._process = None
+        self._finish_source_time()
 
     def terminate(self) -> None:
         if self._process is None:
@@ -179,6 +211,17 @@ class ContinuousFFmpegWorker:
         self._process.terminate()
         self._process.wait(timeout=10)
         self._process = None
+        self._finish_source_time()
+
+    def publish_source_times(self, paths: LiveSessionPaths) -> None:
+        if self.source_time is not None and self.source_time.paths == paths:
+            self.source_time.publish()
+
+    def _finish_source_time(self) -> None:
+        if self.source_time is not None:
+            self.source_time.publish()
+            self.source_time.close()
+            self.source_time = None
 
     def _drain_stdout(self) -> None:
         if self._process is None or self._process.stdout is None:

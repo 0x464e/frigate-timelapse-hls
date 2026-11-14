@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Event, Lock, Thread
+from time import monotonic
 from typing import Any
 from urllib.parse import quote
 from urllib.request import urlopen
@@ -20,6 +21,7 @@ from urllib.request import urlopen
 from .config import Settings
 from .models import SessionSnapshot
 from .publication import atomic_json, atomic_write
+from .source_time import MAP_DIRECTORY
 from .state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -104,6 +106,8 @@ class LibraryPublisher:
         self._thread: Thread | None = None
         self._request: PosterRequest | None = None
         self._publish_lock = Lock()
+        self._next_retention_refresh = monotonic()
+        self._retention_days: float | None = None
 
     def start(self) -> None:
         self.publish()
@@ -120,10 +124,32 @@ class LibraryPublisher:
         while not self._stop.is_set():
             try:
                 self.process_poster()
+                self._refresh_retention()
                 self.publish()
             except Exception:
                 logger.exception("Web publication failed; timelapse ingestion continues")
             self._stop.wait(5)
+
+    def _refresh_retention(self) -> None:
+        frigate = self.settings.frigate
+        if not frigate.public_url:
+            return
+        now = monotonic()
+        if now < self._next_retention_refresh:
+            return
+        self._next_retention_refresh = now + 300
+        try:
+            with urlopen(f"{frigate.base_url}/api/config", timeout=5) as response:
+                config = json.load(response)
+            continuous = config["cameras"][self.settings.camera.name]["record"]["continuous"]
+            days = continuous["days"]
+            if type(days) not in (int, float) or not math.isfinite(days) or days < 0:
+                raise ValueError("Invalid Frigate continuous retention")
+            # Zero means continuous retention is off. Other policies may still
+            # keep recordings, so use an unrestricted link window in that case.
+            self._retention_days = days if days > 0 else None
+        except (OSError, ValueError, KeyError, TypeError, OverflowError):
+            logger.warning("Unable to read Frigate retention; keeping the current link window")
 
     def observe(self, snapshot: SessionSnapshot) -> None:
         """Capture schedule identity and choose a poster without doing network I/O."""
@@ -297,6 +323,9 @@ class LibraryPublisher:
                     else None,
                     "playlist_url": f"{base}/index.m3u8",
                     "live_playlist_url": f"{base}/live.m3u8",
+                    "source_times_url": f"{base}/{MAP_DIRECTORY}/"
+                    if self.settings.frigate.public_url and (directory / MAP_DIRECTORY).is_dir()
+                    else None,
                     "duration": summary.duration,
                     "ready": summary.ready,
                     "recordings_available": session.get("recordings_available", False)
@@ -325,6 +354,9 @@ class LibraryPublisher:
             },
             "thumbnail_offset_seconds": self.settings.thumbnail.offset_seconds,
             "published_at": now.isoformat(),
+            "frigate_url": str(self.settings.frigate.public_url)
+            if self.settings.frigate.public_url else None,
+            "frigate_retention_days": self._retention_days,
             "days": sorted(entries, key=lambda item: item["date"], reverse=True),
         }
         atomic_json(self.root / "library.json", manifest)

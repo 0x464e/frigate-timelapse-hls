@@ -39,6 +39,7 @@ import {
 } from "../lib";
 import type { Day, Library } from "../types";
 import { SpeedPopover } from "./SpeedPopover";
+import { RecordingJump, type BufferedSegment } from "./RecordingJump";
 import { Timeline } from "./Timeline";
 import { useMediaQuery } from "../useMediaQuery";
 import { useVideoZoom } from "../useVideoZoom";
@@ -58,6 +59,8 @@ type OrientationLock = ScreenOrientation & {
 
 export function Player({ library, day, date, now, onStart }: Props) {
   const video = useRef<HTMLVideoElement>(null);
+  const fragments = useRef(new Map<string, BufferedSegment>());
+  const trackFrames = Boolean(library.frigate_url);
   const shell = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const desiredPlayback = useRef(false);
@@ -204,6 +207,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
     let destroy = () => {};
     let recoveries = 0;
     let manifestLoaded = false;
+    fragments.current.clear();
     loadingSource.current = true;
     const begin = () => {
       if (cancelled) return;
@@ -262,6 +266,22 @@ export function Player({ library, day, date, now, onStart }: Props) {
           },
         });
         destroy = () => hls.destroy();
+        if (trackFrames) {
+          hls.on(Hls.Events.FRAG_BUFFERED, (_, { frag }) => {
+            const name = frag.relurl;
+            if (
+              name &&
+              frag.startPTS !== undefined &&
+              frag.endPTS !== undefined
+            ) {
+              fragments.current.set(name, {
+                name,
+                start: frag.startPTS,
+                end: frag.endPTS,
+              });
+            }
+          });
+        }
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           manifestLoaded = true;
           begin();
@@ -300,7 +320,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
       element.removeAttribute("src");
       element.load();
     };
-  }, [started, source, sourceMode, retry]);
+  }, [started, source, sourceMode, retry, trackFrames]);
 
   useEffect(() => {
     selectedRate.current = (boosting ? Math.min(speed * 2, 40) : speed) / 10;
@@ -794,6 +814,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
             <button
               className="icon-button settings-button"
               aria-label="Player settings"
+              title="Player settings"
               onClick={() => {
                 setSpeedOpen(false);
                 setSettingsOpen(true);
@@ -819,6 +840,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                   <PlayButton
                     className="icon-button"
                     aria-label={paused ? "Play" : "Pause"}
+                    title={paused ? "Play" : "Pause"}
                     onClick={() => {
                       desiredPlayback.current = paused;
                       showControls();
@@ -834,6 +856,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                 <button
                   className="icon-button"
                   aria-label="Start over"
+                  title="Start over"
                   onClick={() => seek(0)}
                 >
                   <SkipBack size={19} />
@@ -854,10 +877,22 @@ export function Player({ library, day, date, now, onStart }: Props) {
                 <button
                   className="latest-button"
                   aria-label="Jump to latest available footage"
+                  title="Jump to latest available footage"
                   onClick={() => seek(Math.max(0, duration - 0.1))}
                 >
                   {isGrowing && <span className="pulse-dot" />} Latest
                 </button>
+                {day?.source_times_url && trackFrames && (
+                  <RecordingJump
+                    key={`${source}-${sourceMode}-${retry}`}
+                    day={day}
+                    library={library}
+                    video={video}
+                    fragments={fragments}
+                    now={now}
+                    blocked={Boolean(error) || scrubbing}
+                  />
+                )}
               </div>
               <div className="control-group">
                 <SpeedPopover
@@ -870,6 +905,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                   <button
                     className="icon-button"
                     aria-label="Picture in picture"
+                    title="Picture in picture"
                     onClick={() => {
                       if (document.pictureInPictureElement)
                         void document.exitPictureInPicture().catch(() => {});
@@ -887,6 +923,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                 <button
                   className="icon-button"
                   aria-label={full ? "Exit fullscreen" : "Enter fullscreen"}
+                  title={full ? "Exit fullscreen" : "Enter fullscreen"}
                   onClick={() => void fullscreen()}
                 >
                   {full ? <Minimize /> : <Maximize />}
@@ -910,6 +947,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                 <Dialog.Close
                   className="icon-button"
                   aria-label="Close settings"
+                  title="Close settings"
                 >
                   <X />
                 </Dialog.Close>

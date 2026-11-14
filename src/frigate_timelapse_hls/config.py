@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     NoDecode,
@@ -78,6 +78,14 @@ class PathsConfig(ConfigModel):
 class FrigateConfig(ConfigModel):
     base_url: str
     recordings_root: str
+    public_url: HttpUrl | None = None
+
+    @field_validator("public_url")
+    @classmethod
+    def _validate_public_url(cls, url: HttpUrl | None) -> HttpUrl | None:
+        if url and (url.username or url.password or url.query or url.fragment):
+            raise ValueError("public_url must be a browser URL without credentials or parameters")
+        return url
 
     @field_validator("base_url", "recordings_root")
     @classmethod

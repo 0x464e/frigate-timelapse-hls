@@ -65,6 +65,8 @@ test.afterEach(({ page }) => {
 const date = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Europe/Helsinki",
 }).format(new Date());
+const retentionTestTime = new Date(`${date}T12:00:00Z`);
+const retentionTestSource = retentionTestTime.getTime() / 1000 - 3 * 86400 - 50;
 const makeDay = (value: string): Day => ({
   date: value,
   generation_id: "test-one",
@@ -82,7 +84,12 @@ const makeDay = (value: string): Day => ({
   schedule_end: null,
   render_speed: 288,
 });
-async function fixture(page: Page, growing = false, poster = false) {
+async function fixture(
+  page: Page,
+  growing = false,
+  poster = false,
+  recordingJump = false,
+) {
   let broken = false;
   let failedSegments = 0;
   let segments = growing ? 3 : 12;
@@ -104,12 +111,33 @@ async function fixture(page: Page, growing = false, poster = false) {
       { ...makeDay("2026-04-22"), complete: true, stream_ended: true },
     ],
   };
+  if (recordingJump) {
+    day.source_times_url = `/published/test/${date}/source-times/`;
+    library.frigate_url = "https://frigate.example/";
+    library.frigate_retention_days = 3;
+  }
   const media: string[] = [];
   await page.route("**/published/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith("library.json"))
       return route.fulfill({ json: library });
     media.push(url.pathname + url.search);
+    const segmentMap = /\/source-times\/(segment-(\d+)\.ts)\.json$/.exec(
+      url.pathname,
+    );
+    if (recordingJump && segmentMap) {
+      return route.fulfill({
+        json: {
+          version: 1,
+          generation_id: day.generation_id,
+          segment: segmentMap[1],
+          frames: Array.from({ length: 24 }, (_, frame) => [
+            3750 * frame,
+            (retentionTestSource + Number(segmentMap[2]) * 100 + frame) * 1000,
+          ]),
+        },
+      });
+    }
     if (url.pathname.endsWith("poster.jpg"))
       return route.fulfill({
         body: readFileSync(`${directory}poster.jpg`),
@@ -150,6 +178,9 @@ async function fixture(page: Page, growing = false, poster = false) {
   });
   return {
     media,
+    setRetention: (days: number | null) => {
+      library.frigate_retention_days = days;
+    },
     startDay: (value: string, ready = true) => {
       library.days.unshift({
         ...makeDay(value),
@@ -182,6 +213,85 @@ async function fixture(page: Page, growing = false, poster = false) {
     },
   };
 }
+
+test("Frigate jump stays in the controls during playback, seeks, and expiry", async ({
+  page,
+}, testInfo) => {
+  if (testInfo.project.name === "android")
+    await page.setViewportSize({ width: 320, height: 700 });
+  await page.clock.setFixedTime(retentionTestTime);
+  const { media, setRetention } = await fixture(page, false, false, true);
+  await page.goto("/");
+  const play = page.getByRole("button", {
+    name: "Play timelapse",
+    exact: true,
+  });
+  await expect(play).toBeVisible();
+  expect(media).toHaveLength(0);
+  await play.click();
+  await expect
+    .poll(() => videoState(page).then((state) => state.time))
+    .toBeGreaterThan(0.15);
+  const video = page.locator("video");
+  const jump = page
+    .locator(".control-bar")
+    .getByRole("link", { name: "Open in Frigate" });
+  await expect(jump).toHaveAttribute(
+    "href",
+    new RegExp(
+      `timestamp=test_(${Array.from({ length: 24 }, (_, i) => retentionTestSource + 100 + i).join("|")})$`,
+    ),
+  );
+  const firstHref = await jump.getAttribute("href");
+  await expect(jump).not.toHaveAttribute("href", firstHref!);
+  expect((await videoState(page)).paused).toBe(false);
+  await video.evaluate((element) => {
+    const media = element as HTMLVideoElement;
+    media.pause();
+    media.currentTime = 1.26;
+  });
+  await expect(
+    page.getByRole("link", { name: "Open in Frigate" }),
+  ).toHaveAttribute(
+    "href",
+    `https://frigate.example/review?timestamp=test_${retentionTestSource + 106}`,
+  );
+  await expect(jump).toHaveAttribute("title", /^Jump to .+ in Frigate$/);
+  await expect(
+    jump.getByText("Open in Frigate", { exact: true }),
+  ).toBeVisible();
+  if (testInfo.project.name === "android") {
+    const fullscreen = await page
+      .getByRole("button", { name: "Enter fullscreen" })
+      .boundingBox();
+    expect(fullscreen).not.toBeNull();
+    expect(fullscreen!.x + fullscreen!.width).toBeLessThanOrEqual(320);
+  }
+  await video.evaluate((element) => {
+    (element as HTMLVideoElement).currentTime = 0.26;
+  });
+  await expect(
+    page
+      .locator(".control-bar")
+      .getByRole("button", { name: "Open in Frigate" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Open in Frigate" })).toHaveCount(
+    0,
+  );
+  setRetention(4);
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
+  await expect(
+    page.getByRole("link", { name: "Open in Frigate" }),
+  ).toHaveAttribute(
+    "href",
+    `https://frigate.example/review?timestamp=test_${retentionTestSource + 6}`,
+  );
+  expect(media.some((url) => url.includes("recording-coverage.json"))).toBe(
+    false,
+  );
+});
 
 test("poster waits for Play; real HLS plays and speed does not persist", async ({
   page,

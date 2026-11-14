@@ -644,6 +644,7 @@ class TimelapsePipeline:
         self._services.hls_publisher.publish_snapshot_playlist(
             paths
         )
+        self._services.worker.publish_source_times(paths)
 
     @staticmethod
     def _filter_pending_clips(
