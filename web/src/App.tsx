@@ -169,6 +169,7 @@ function Archive({ library, now }: { library: Library; now: Date }) {
                 <button
                   className="icon-button"
                   aria-label="Previous month"
+                  title="Previous month"
                   disabled={monthKey <= earliest.slice(0, 7)}
                   onClick={() => moveMonth(-1)}
                 >
@@ -177,6 +178,7 @@ function Archive({ library, now }: { library: Library; now: Date }) {
                 <button
                   className="icon-button"
                   aria-label="Next month"
+                  title="Next month"
                   disabled={monthKey >= today.slice(0, 7)}
                   onClick={() => moveMonth(1)}
                 >

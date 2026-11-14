@@ -45,6 +45,7 @@ export function SpeedPopover({
         ref={trigger}
         className="speed-button"
         aria-label="Change playback speed"
+        title="Change playback speed"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? id : undefined}

@@ -814,6 +814,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
             <button
               className="icon-button settings-button"
               aria-label="Player settings"
+              title="Player settings"
               onClick={() => {
                 setSpeedOpen(false);
                 setSettingsOpen(true);
@@ -839,6 +840,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                   <PlayButton
                     className="icon-button"
                     aria-label={paused ? "Play" : "Pause"}
+                    title={paused ? "Play" : "Pause"}
                     onClick={() => {
                       desiredPlayback.current = paused;
                       showControls();
@@ -854,6 +856,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                 <button
                   className="icon-button"
                   aria-label="Start over"
+                  title="Start over"
                   onClick={() => seek(0)}
                 >
                   <SkipBack size={19} />
@@ -874,6 +877,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                 <button
                   className="latest-button"
                   aria-label="Jump to latest available footage"
+                  title="Jump to latest available footage"
                   onClick={() => seek(Math.max(0, duration - 0.1))}
                 >
                   {isGrowing && <span className="pulse-dot" />} Latest
@@ -901,6 +905,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                   <button
                     className="icon-button"
                     aria-label="Picture in picture"
+                    title="Picture in picture"
                     onClick={() => {
                       if (document.pictureInPictureElement)
                         void document.exitPictureInPicture().catch(() => {});
@@ -918,6 +923,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                 <button
                   className="icon-button"
                   aria-label={full ? "Exit fullscreen" : "Enter fullscreen"}
+                  title={full ? "Exit fullscreen" : "Enter fullscreen"}
                   onClick={() => void fullscreen()}
                 >
                   {full ? <Minimize /> : <Maximize />}
@@ -941,6 +947,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                 <Dialog.Close
                   className="icon-button"
                   aria-label="Close settings"
+                  title="Close settings"
                 >
                   <X />
                 </Dialog.Close>

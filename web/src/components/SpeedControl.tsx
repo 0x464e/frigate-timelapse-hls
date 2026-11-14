@@ -20,6 +20,7 @@ export function SpeedControl({
         <button
           className="icon-button"
           aria-label="Decrease speed by 0.1"
+          title="Decrease speed by 0.1"
           disabled={speed === 5}
           onClick={() => adjust(-1)}
         >
@@ -73,6 +74,7 @@ export function SpeedControl({
         <button
           className="icon-button"
           aria-label="Increase speed by 0.1"
+          title="Increase speed by 0.1"
           disabled={speed === 40}
           onClick={() => adjust(1)}
         >
