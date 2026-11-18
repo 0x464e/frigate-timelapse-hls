@@ -85,6 +85,8 @@ class TimelapsePipeline:
             camera=self._services.settings.camera.name,
             day=observed_at.date(),
         )
+        if existing_state is not None and existing_state.status == SessionStatus.COMPLETED:
+            return self._completed_result(existing_state)
         snapshot = self._build_snapshot(now=observed_at, existing_state=existing_state)
         if snapshot is None:
             return LoopResult(
@@ -114,11 +116,27 @@ class TimelapsePipeline:
             worker_running=self._services.worker.is_running(),
         )
 
+    @staticmethod
+    def _completed_result(state: SessionState) -> LoopResult:
+        return LoopResult(
+            scanned_day=state.day,
+            clips_seen=state.discovered_clip_count,
+            clips_pending=0,
+            clips_ingested=state.ingested_clip_count,
+            session_mode=SessionMode.COMPLETED,
+            worker_running=False,
+        )
+
     def run_loop_iteration(self, now: datetime | None = None) -> tuple[LoopResult, float]:
         observed_at = now or datetime.now(tz=self._services.settings.tzinfo)
         settings = self._services.settings
+        existing_state = self._services.store.get_day_session(
+            camera=settings.camera.name,
+            day=observed_at.date(),
+        )
+        session_start, _ = self._session_window(observed_at.date(), existing_state)
         if (
-            observed_at >= settings.window_start_for_day(observed_at.date())
+            observed_at >= session_start
             and self._last_cleanup_day != observed_at.date()
         ):
             self._last_cleanup_day = observed_at.date()
@@ -129,10 +147,15 @@ class TimelapsePipeline:
                 logger.info("Removed %s clip records from completed past days", removed)
             except sqlite3.Error:
                 logger.exception("Daily database cleanup failed; ingestion continues")
-        existing_state = self._services.store.get_day_session(
-            camera=self._services.settings.camera.name,
-            day=observed_at.date(),
-        )
+        # Completion is final: never discover or append more clips to this generation.
+        if existing_state is not None and existing_state.status == SessionStatus.COMPLETED:
+            sleep_seconds = self._compute_idle_sleep(current_time=observed_at)
+            logger.info(
+                "Session already completed for %s; next scan in %.1f seconds",
+                existing_state.day,
+                sleep_seconds,
+            )
+            return self._completed_result(existing_state), sleep_seconds
         initial_snapshot = self._build_snapshot(
             now=observed_at,
             existing_state=existing_state,
@@ -323,16 +346,28 @@ class TimelapsePipeline:
             )
         return result, sleep_seconds
 
+    def _session_window(
+        self,
+        day: date,
+        existing_state: SessionState | None,
+    ) -> tuple[datetime, datetime]:
+        settings = self._services.settings
+        if existing_state is not None and (
+            settings.app.restart_policy == "resume"
+            or existing_state.status == SessionStatus.COMPLETED
+        ):
+            # Reinterpreting a resumed day's window can prepend clips or lose its tail.
+            return existing_state.session_start, existing_state.session_end
+        return settings.window_start_for_day(day), settings.window_end_for_day(day)
+
     def _build_snapshot(
         self,
         *,
         now: datetime,
         existing_state: SessionState | None,
     ) -> SessionSnapshot | None:
-        settings = self._services.settings
         day = now.date()
-        session_start = settings.window_start_for_day(day)
-        session_end = settings.window_end_for_day(day)
+        session_start, session_end = self._session_window(day, existing_state)
         query_end = min(now, session_end)
         if query_end <= session_start:
             return None
@@ -596,8 +631,10 @@ class TimelapsePipeline:
     def _compute_idle_sleep(self, *, current_time: datetime) -> float:
         settings = self._services.settings
         day = current_time.date()
-        session_start = settings.window_start_for_day(day)
-        if current_time < session_start:
+        state = self._services.store.get_day_session(camera=settings.camera.name, day=day)
+        session_start, _ = self._session_window(day, state)
+        completed = state is not None and state.status == SessionStatus.COMPLETED
+        if not completed and current_time < session_start:
             wake_at = session_start + timedelta(seconds=settings.app.ready_buffer_seconds)
             return max(0.0, (wake_at - current_time).total_seconds())
         next_day = day + timedelta(days=1)
