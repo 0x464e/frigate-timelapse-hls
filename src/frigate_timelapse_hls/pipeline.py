@@ -354,12 +354,23 @@ class TimelapsePipeline:
     ) -> tuple[datetime, datetime]:
         settings = self._services.settings
         if existing_state is not None and existing_state.day == day and (
-            settings.app.restart_policy == "resume"
+            (settings.app.restart_policy == "resume" and self._can_resume(existing_state))
             or existing_state.status == SessionStatus.COMPLETED
         ):
             # Reinterpreting a resumed day's window can prepend clips or lose its tail.
             return existing_state.session_start, existing_state.session_end
         return settings.window_start_for_day(day), settings.window_end_for_day(day)
+
+    def _can_resume(self, state: SessionState) -> bool:
+        # A newly started worker may not have published its first playlist yet.
+        if self._active_day == state.day and self._services.worker.is_running():
+            return True
+        settings = self._services.settings
+        live_playlist = (
+            settings.paths.output_root / "published" / settings.camera.name
+            / state.day.isoformat() / "live.m3u8"
+        )
+        return live_playlist.is_file()
 
     def _build_snapshot(
         self,
@@ -467,7 +478,7 @@ class TimelapsePipeline:
             )
             return None, session_paths
 
-        if not session_paths.live_playlist_path.exists():
+        if not session_paths.live_playlist_path.is_file():
             logger.warning(
                 (
                     "Cannot resume %s because live.m3u8 is missing; regenerating the "

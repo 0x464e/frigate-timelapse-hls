@@ -490,3 +490,69 @@ def test_live_follow_queries_tail_before_session_end(session_pipeline, delay) ->
         start_time=state.session_end - timedelta(seconds=50),
         end_time=state.session_end,
     )
+
+
+@pytest.mark.parametrize(
+    "schedule, hour",
+    [
+        ({"start_time": "07:00", "end_time": "19:00"}, 7),
+        ({"start_time": "09:00", "end_time": "21:00"}, 9),
+    ],
+)
+def test_missing_playlist_regenerates_using_current_window(
+    session_pipeline, schedule, hour
+) -> None:
+    pipeline, state = session_pipeline
+    services = pipeline._services
+    services.settings = Settings(**(services.settings.model_dump() | {"schedule": schedule}))
+    services.library.settings = services.settings
+    services.store.upsert_day_session(
+        replace(
+            state,
+            status=SessionStatus.STOPPED,
+            mode=SessionMode.CATCH_UP,
+        )
+    )
+    (state.segment_dir / "live.m3u8").unlink()
+    generation = (state.segment_dir / "generation.txt").read_text()
+    start = services.settings.window_start_for_day(state.day)
+    now = start + timedelta(minutes=5)
+    services.scanner.scan_range.return_value = []
+    with patch("frigate_timelapse_hls.pipeline.datetime", wraps=datetime) as clock:
+        clock.now.return_value = now
+        result, _ = pipeline.run_loop_iteration(now)
+    services.scanner.scan_range.assert_called_once_with(start_time=start, end_time=now)
+    saved = services.store.get_day_session(camera="cam", day=state.day)
+    assert saved.session_start.hour == hour
+    assert saved.session_start == start
+    assert saved.session_end == services.settings.window_end_for_day(state.day)
+    assert saved.ingested_clip_count == 0
+    assert services.store.list_ingested_source_ids(camera="cam", day=state.day) == set()
+    assert (state.segment_dir / "generation.txt").read_text() != generation
+    assert result.session_mode == SessionMode.LIVE_FOLLOW
+    # The worker has no first playlist yet; subsequent scans must retain its window.
+    assert pipeline._session_window(state.day, saved) == (saved.session_start, saved.session_end)
+    services.worker.start.assert_called_once()
+
+
+def test_missing_playlist_waits_until_current_schedule_start(session_pipeline) -> None:
+    pipeline, state = session_pipeline
+    services = pipeline._services
+    services.settings = Settings(
+        **(
+            services.settings.model_dump()
+            | {
+                "schedule": {"start_time": "09:00", "end_time": "21:00"},
+            }
+        )
+    )
+    services.store.upsert_day_session(replace(state, status=SessionStatus.STOPPED))
+    (state.segment_dir / "live.m3u8").unlink()
+    before = {p.name: p.read_bytes() for p in state.segment_dir.iterdir()}
+    now = state.session_start + timedelta(minutes=30)
+    result, sleep = pipeline.run_loop_iteration(now)
+    assert result.session_mode == SessionMode.IDLE
+    assert sleep == 30 * 60 + 30
+    services.scanner.scan_range.assert_not_called()
+    services.worker.start.assert_not_called()
+    assert {p.name: p.read_bytes() for p in state.segment_dir.iterdir()} == before
