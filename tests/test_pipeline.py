@@ -425,3 +425,52 @@ def test_cleanup_runs_once_per_schedule_day_and_never_blocks_ingestion(
         call(camera="cam", before_day=start.date()),
         call(camera="cam", before_day=(start + timedelta(days=1)).date()),
     ]
+
+
+def test_snapshot_does_not_reuse_another_days_state(session_pipeline) -> None:
+    pipeline, state = session_pipeline
+    services = pipeline._services
+    now = state.session_start.replace(hour=0) + timedelta(days=1, minutes=1)
+    services.scanner.scan_range.return_value = []
+    assert pipeline._build_snapshot(now=now, existing_state=state) is None
+    services.scanner.scan_range.assert_not_called()
+    now = services.settings.window_start_for_day(now.date()) + timedelta(minutes=1)
+    snapshot = pipeline._build_snapshot(now=now, existing_state=state)
+    assert snapshot is not None
+    assert snapshot.day == now.date()
+    assert snapshot.session_start == services.settings.window_start_for_day(now.date())
+
+
+def test_catchup_crossing_midnight_finishes_original_day(session_pipeline) -> None:
+    pipeline, state = session_pipeline
+    services = pipeline._services
+    services.store.upsert_day_session(
+        replace(
+            state,
+            status=SessionStatus.STOPPED,
+            mode=SessionMode.CATCH_UP,
+        )
+    )
+    clip = SourceClip(
+        Path("/late.mp4"), "cam", state.session_end - timedelta(seconds=20), 10, Path("late.mp4")
+    )
+    services.scanner.scan_range.return_value = [clip]
+    before_midnight = state.session_end.replace(hour=23, minute=59)
+    after_midnight = before_midnight + timedelta(minutes=2)
+    with patch("frigate_timelapse_hls.pipeline.datetime", wraps=datetime) as clock:
+        clock.now.return_value = after_midnight
+        result, sleep = pipeline.run_loop_iteration(before_midnight)
+    saved = services.store.get_day_session(camera="cam", day=state.day)
+    assert saved.status == SessionStatus.COMPLETED
+    assert result.scanned_day == state.day
+    assert result.session_mode == SessionMode.COMPLETED
+    assert saved.ingested_clip_count == 2
+    assert services.store.get_day_session(camera="cam", day=after_midnight.date()) is None
+    assert services.store.list_ingested_source_ids(camera="cam", day=state.day) == {
+        "source.mp4",
+        "late.mp4",
+    }
+    services.ingestor.ingest_clip.assert_called_once_with(clip, services.worker)
+    services.worker.stop.assert_called_once()
+    next_start = services.settings.window_start_for_day(after_midnight.date())
+    assert sleep == (next_start + timedelta(seconds=30) - after_midnight).total_seconds()

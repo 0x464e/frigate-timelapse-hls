@@ -254,6 +254,7 @@ class TimelapsePipeline:
 
             next_snapshot = self._build_snapshot(
                 now=datetime.now(tz=self._services.settings.tzinfo),
+                day=snapshot.day,
                 existing_state=self._services.store.get_day_session(
                     camera=self._services.settings.camera.name,
                     day=snapshot.day,
@@ -352,7 +353,7 @@ class TimelapsePipeline:
         existing_state: SessionState | None,
     ) -> tuple[datetime, datetime]:
         settings = self._services.settings
-        if existing_state is not None and (
+        if existing_state is not None and existing_state.day == day and (
             settings.app.restart_policy == "resume"
             or existing_state.status == SessionStatus.COMPLETED
         ):
@@ -365,8 +366,11 @@ class TimelapsePipeline:
         *,
         now: datetime,
         existing_state: SessionState | None,
+        day: date | None = None,
     ) -> SessionSnapshot | None:
-        day = now.date()
+        day = day or now.date()
+        if existing_state is not None and existing_state.day != day:
+            existing_state = None
         session_start, session_end = self._session_window(day, existing_state)
         query_end = min(now, session_end)
         if query_end <= session_start:
