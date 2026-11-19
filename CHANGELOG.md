@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.1](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.4.0...v0.4.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* preserve session schedules across configuration changes ([#10](https://github.com/0x464e/frigate-timelapse-hls/issues/10)) ([c94e961](https://github.com/0x464e/frigate-timelapse-hls/commit/c94e961aa9f13143c783f4e2c6ccaa7e1333c737))
+
+
+### Continuous Integration
+
+* **coderabbit:** ignore release-please PRs ([c34600d](https://github.com/0x464e/frigate-timelapse-hls/commit/c34600d928212b56c754157867694129fc7bb733))
+
 ## [0.4.0](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.3.1...v0.4.0) (2026-11-14)
 
 
