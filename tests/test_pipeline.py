@@ -556,3 +556,82 @@ def test_missing_playlist_waits_until_current_schedule_start(session_pipeline) -
     services.scanner.scan_range.assert_not_called()
     services.worker.start.assert_not_called()
     assert {p.name: p.read_bytes() for p in state.segment_dir.iterdir()} == before
+
+
+@pytest.mark.parametrize("today_status", [None, SessionStatus.STOPPED, SessionStatus.COMPLETED])
+def test_catchup_after_todays_start_advances_to_unfinished_today(
+    session_pipeline, today_status
+) -> None:
+    pipeline, state = session_pipeline
+    services = pipeline._services
+    services.settings = Settings(
+        **(
+            services.settings.model_dump()
+            | {
+                "schedule": {"start_time": "00:01", "end_time": "19:00"},
+            }
+        )
+    )
+    services.library.settings = services.settings
+    services.store.upsert_day_session(
+        replace(
+            state,
+            status=SessionStatus.STOPPED,
+            mode=SessionMode.CATCH_UP,
+        )
+    )
+    before_midnight = state.session_end.replace(hour=23, minute=59)
+    now = before_midnight + timedelta(minutes=4)
+    start = services.settings.window_start_for_day(now.date())
+    end = services.settings.window_end_for_day(now.date())
+    if today_status is not None:
+        paths = services.hls_publisher.prepare_day_session(
+            camera="cam",
+            day_label=now.date().isoformat(),
+            output_root=services.settings.paths.output_root,
+            reset=False,
+        )
+        services.store.upsert_day_session(
+            replace(
+                state,
+                day=now.date(),
+                session_start=start,
+                session_end=end,
+                status=today_status,
+                mode=SessionMode.CATCH_UP,
+                playlist_path=paths.playlist_path,
+                segment_dir=paths.segment_dir,
+                ingested_clip_count=0,
+                discovered_clip_count=0,
+                last_discovered_clip_id=None,
+                last_ingested_clip_id=None,
+            )
+        )
+    clip = SourceClip(
+        Path("/late.mp4"), "cam", state.session_end - timedelta(seconds=20), 10, Path("late.mp4")
+    )
+    services.scanner.scan_range.return_value = [clip]
+    with patch("frigate_timelapse_hls.pipeline.datetime", wraps=datetime) as clock:
+        clock.now.return_value = now
+        result, sleep = pipeline.run_loop_iteration(before_midnight)
+        assert result.scanned_day == state.day
+        assert result.session_mode == SessionMode.COMPLETED
+        if today_status == SessionStatus.COMPLETED:
+            next_start = services.settings.window_start_for_day(now.date() + timedelta(days=1))
+            assert sleep == (next_start + timedelta(seconds=30) - now).total_seconds()
+        else:
+            assert sleep == 0
+        services.scanner.scan_range.reset_mock()
+        services.scanner.scan_range.return_value = []
+        result, _ = pipeline.run_loop_iteration(now)
+    saved = services.store.get_day_session(camera="cam", day=now.date())
+    assert saved.session_start == start
+    assert saved.session_end == end
+    assert result.scanned_day == now.date()
+    if today_status == SessionStatus.COMPLETED:
+        services.scanner.scan_range.assert_not_called()
+        assert result.session_mode == SessionMode.COMPLETED
+    else:
+        services.scanner.scan_range.assert_called_once_with(start_time=start, end_time=now)
+        assert result.session_mode == SessionMode.LIVE_FOLLOW
+        assert services.worker.start.call_count == 2

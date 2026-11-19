@@ -652,6 +652,9 @@ class TimelapsePipeline:
         if not completed and current_time < session_start:
             wake_at = session_start + timedelta(seconds=settings.app.ready_buffer_seconds)
             return max(0.0, (wake_at - current_time).total_seconds())
+        if not completed:
+            # A previous day's catch-up may finish after today's schedule has started.
+            return 0.0
         next_day = day + timedelta(days=1)
         wake_at = settings.window_start_for_day(next_day) + timedelta(
             seconds=settings.app.ready_buffer_seconds
