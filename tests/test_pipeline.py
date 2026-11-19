@@ -222,7 +222,7 @@ def test_resumed_session_uses_saved_window_and_next_day_uses_new_schedule(
     result, sleep = pipeline.run_loop_iteration(now)
     assert result.session_mode == SessionMode.COMPLETED
     services.scanner.scan_range.assert_called_once_with(
-        start_time=now - timedelta(seconds=50),
+        start_time=state.session_end - timedelta(seconds=50),
         end_time=state.session_end,
     )
     next_day = state.day + timedelta(days=1)
@@ -474,3 +474,19 @@ def test_catchup_crossing_midnight_finishes_original_day(session_pipeline) -> No
     services.worker.stop.assert_called_once()
     next_start = services.settings.window_start_for_day(after_midnight.date())
     assert sleep == (next_start + timedelta(seconds=30) - after_midnight).total_seconds()
+
+
+@pytest.mark.parametrize("delay", [0, 5, 300])
+def test_live_follow_queries_tail_before_session_end(session_pipeline, delay) -> None:
+    pipeline, state = session_pipeline
+    services = pipeline._services
+    services.worker.is_running.return_value = True
+    services.scanner.scan_range.return_value = []
+    live = replace(state, status=SessionStatus.RUNNING, mode=SessionMode.LIVE_FOLLOW)
+    now = state.session_end + timedelta(seconds=delay)
+    snapshot = pipeline._build_snapshot(now=now, existing_state=live)
+    assert snapshot is not None
+    services.scanner.scan_range.assert_called_once_with(
+        start_time=state.session_end - timedelta(seconds=50),
+        end_time=state.session_end,
+    )

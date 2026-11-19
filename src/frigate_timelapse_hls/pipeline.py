@@ -376,7 +376,7 @@ class TimelapsePipeline:
         if query_end <= session_start:
             return None
         query_start = self._compute_query_start(
-            now=now,
+            now=query_end,
             session_start=session_start,
             existing_state=existing_state,
         )
