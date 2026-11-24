@@ -257,9 +257,10 @@ test("Frigate jump stays in the controls during playback, seeks, and expiry", as
     `https://frigate.example/review?timestamp=test_${retentionTestSource + 106}`,
   );
   await expect(jump).toHaveAttribute("title", /^Jump to .+ in Frigate$/);
-  await expect(
-    jump.getByText("Open in Frigate", { exact: true }),
-  ).toBeVisible();
+  if (testInfo.project.name === "desktop")
+    await expect(
+      jump.getByText("Open in Frigate", { exact: true }),
+    ).toBeVisible();
   if (testInfo.project.name === "android") {
     const fullscreen = await page
       .getByRole("button", { name: "Enter fullscreen" })
@@ -291,6 +292,55 @@ test("Frigate jump stays in the controls during playback, seeks, and expiry", as
   expect(media.some((url) => url.includes("recording-coverage.json"))).toBe(
     false,
   );
+});
+
+test("Frigate label shrinks before controls wrap and expands again", async ({
+  page,
+}) => {
+  await fixture(page, false, false, true);
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Play timelapse", exact: true })
+    .click();
+  const bar = page.locator(".control-bar");
+  await expect(bar.locator(".recording-jump")).toBeVisible();
+  await page.locator("video").evaluate((v) => (v as HTMLVideoElement).pause());
+  const seen = new Set<string>();
+  for (const width of [850, 450, 393, 360, 320, 280, 220, 850]) {
+    await page.setViewportSize({ width, height: 800 });
+    const expected = await bar.evaluate((element) => {
+      const bar = element as HTMLElement;
+      const saved = bar.dataset.frigateLabel;
+      const groups = Array.from(bar.children) as HTMLElement[];
+      const gap = parseFloat(getComputedStyle(bar).columnGap);
+      let mode = "icon";
+      let fits = false;
+      for (const candidate of ["full", "short", "icon"]) {
+        bar.dataset.frigateLabel = candidate;
+        const required = groups.reduce(
+          (sum, group) => sum + group.getBoundingClientRect().width,
+          gap,
+        );
+        if (required <= bar.clientWidth) {
+          mode = candidate;
+          fits = true;
+          break;
+        }
+      }
+      bar.dataset.frigateLabel = saved;
+      return { mode, fits };
+    });
+    await expect(bar).toHaveAttribute("data-frigate-label", expected.mode);
+    seen.add(expected.mode);
+    const rows = await bar
+      .locator(":scope > .control-group")
+      .evaluateAll((groups) =>
+        groups.map((group) => group.getBoundingClientRect().y),
+      );
+    if (expected.fits) expect(Math.abs(rows[0] - rows[1])).toBeLessThan(1);
+    else expect(rows[1]).toBeGreaterThan(rows[0]);
+  }
+  expect([...seen].sort()).toEqual(["full", "icon", "short"]);
 });
 
 test("poster waits for Play; real HLS plays and speed does not persist", async ({

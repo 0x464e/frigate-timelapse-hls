@@ -40,6 +40,7 @@ import {
 import type { Day, Library } from "../types";
 import { SpeedPopover } from "./SpeedPopover";
 import { RecordingJump, type BufferedSegment } from "./RecordingJump";
+import { PlaybackControls } from "./PlaybackControls";
 import { Timeline } from "./Timeline";
 import { useMediaQuery } from "../useMediaQuery";
 import { useVideoZoom } from "../useVideoZoom";
@@ -160,10 +161,17 @@ export function Player({ library, day, date, now, onStart }: Props) {
       root.style.setProperty("--controls-height", `${bottom.offsetHeight}px`);
     };
     measure();
-    const observer = new ResizeObserver(measure);
+    let pending = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(measure);
+    });
     observer.observe(nav);
     observer.observe(bottom);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(pending);
+    };
   }, [mobile, started]);
   const showSpeed = useCallback(
     (open: boolean) => {
@@ -834,7 +842,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
               onSeek={seek}
               onScrubbing={setScrubbing}
             />
-            <div className="control-bar">
+            <PlaybackControls>
               <div className="control-group">
                 {!mobile && (
                   <PlayButton
@@ -929,7 +937,7 @@ export function Player({ library, day, date, now, onStart }: Props) {
                   {full ? <Minimize /> : <Maximize />}
                 </button>
               </div>
-            </div>
+            </PlaybackControls>
           </div>
         )}
         <Dialog.Root open={settingsOpen} onOpenChange={setSettingsOpen}>

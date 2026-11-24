@@ -167,7 +167,9 @@ export function RecordingJump({
         }
       >
         <ExternalLink aria-hidden="true" />
-        <span className="recording-jump-label">Open in Frigate</span>
+        <span className="recording-jump-label">
+          <span className="recording-jump-prefix">Open in </span>Frigate
+        </span>
       </button>
     );
   }
@@ -201,7 +203,9 @@ export function RecordingJump({
       title={`Jump to ${time} in Frigate`}
     >
       <ExternalLink aria-hidden="true" />
-      <span className="recording-jump-label">Open in Frigate</span>
+      <span className="recording-jump-label">
+        <span className="recording-jump-prefix">Open in </span>Frigate
+      </span>
     </a>
   );
 }
