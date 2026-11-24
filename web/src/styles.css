@@ -409,8 +409,20 @@ a.icon-button:hover {
   gap: 8px;
 }
 .control-bar {
+  flex-wrap: wrap;
+  row-gap: 0;
   justify-content: space-between;
   margin-top: 0;
+}
+.control-bar > .control-group {
+  flex-shrink: 0;
+}
+.control-bar > .control-group:last-child {
+  margin-inline-start: auto;
+}
+.control-bar[data-frigate-label="short"] .recording-jump-prefix,
+.control-bar[data-frigate-label="icon"] .recording-jump-label {
+  display: none;
 }
 .icon-button.recording-jump {
   width: auto;
@@ -1156,13 +1168,6 @@ a.icon-button:hover {
   }
 }
 @media (max-width: 620px) {
-  .control-bar {
-    flex-wrap: wrap;
-    row-gap: 0;
-  }
-  .control-bar > .control-group:last-child {
-    margin-inline-start: auto;
-  }
   .watch-nav {
     padding: max(10px, env(safe-area-inset-top)) 14px 12px;
   }
