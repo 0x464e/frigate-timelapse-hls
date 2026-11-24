@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.4.1...v0.4.2) (2026-11-24)
+
+
+### Bug Fixes
+
+* shorten Frigate label before wrapping playback controls ([#12](https://github.com/0x464e/frigate-timelapse-hls/issues/12)) ([71e8d2f](https://github.com/0x464e/frigate-timelapse-hls/commit/71e8d2f06a75c4466bbca9e0190a4c247c29ada4))
+
 ## [0.4.1](https://github.com/0x464e/frigate-timelapse-hls/compare/v0.4.0...v0.4.1) (2026-11-19)
 
 
